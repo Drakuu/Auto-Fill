@@ -16,7 +16,7 @@
       "js": ["content.js"]
     }
   ],
-  "permissions": ["storage", "activeTab", "scripting"],
+  "permissions": ["storage", "activeTab", "scripting", "alarms"],
   "host_permissions": ["https://*/*", "http://*/*"],
   "web_accessible_resources": [{
     "resources": ["inject.js"],

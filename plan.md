@@ -153,3 +153,33 @@ where the value didn't match any option.
 - [ ] Right-click context menu on forms
 - [ ] Remove all `console.log` from inject/main-world code
 - [ ] Error toast instead of silent failure
+
+---
+
+## Architecture: Runtime data generation ✓
+
+### Replaced all hardcoded data arrays
+Static arrays removed: `words` (103), `firstNames` (120), `lastNames` (80), `emails` (7),
+`countries` (20), `cities` (32), `states` (37), `streets` (15), `companies` (25),
+`jobTitles` (31) → **replaced with 10 tiny procedural generator functions**
+
+### New architecture: Detector → Generator pipeline
+
+Priority order:
+1. **`acDetect`** — checks `autocomplete` attribute (most reliable, 30+ values)
+2. **`typeStrict`** — checks HTML `type` (email, tel, url, password only)
+3. **`labelDetect`** — checks label/name/id/placeholder text (30+ regex patterns)
+4. **`typeLoose`** — checks HTML `type` (number, date, time, color, checkbox, etc.)
+5. Fallback — `generators["text"]` respects `maxLength`
+
+Each detector returns a generator key string. The `generators` map has 40+ lazy functions
+that produce data on first call — no pre-allocated arrays.
+
+### Key generators
+- **Names**: `genFirst()` / `genLast()` — combine 20 starts × 35 mids × 20 ends into
+  realistic names (e.g., "Soren", "Milton", "Davin", "Karson", "Preston")
+- **Company**: `genCompany()` — 20 prefixes × 15 suffixes → 300 combos
+- **Phone/Email/URL**: all procedurally generated
+- **IDs**: CNIC (`12345-1234567-1`), SSN, Passport, PAN, Aadhaar
+- **Card**: CC number, CVV, expiry
+- **Text fallback**: respects `maxLength` (1 word ≤5 chars, 2 words ≤10, 3 words otherwise)

@@ -68,12 +68,37 @@ function isPageButton(el) {
     const type = (el.type || "").toLowerCase();
     return ["submit", "button", "reset"].includes(type);
   }
+  if (tag === "a" || el.getAttribute("role") === "button") {
+    const cls = (el.className || "").toLowerCase();
+    const role = el.getAttribute("role");
+    if (role === "button" || cls.includes("btn") || cls.includes("button")) return true;
+  }
   return false;
+}
+
+function findCustomSelect(inputEl) {
+  if (inputEl.tagName !== "INPUT") return null;
+  const role = inputEl.getAttribute("role");
+  const hasAria = role === "combobox" || inputEl.getAttribute("aria-haspopup") === "listbox" || inputEl.getAttribute("aria-autocomplete") === "list";
+  if (!hasAria) return null;
+  let opts = [], hiddenSelSelector = "";
+  const container = inputEl.closest('[class*="select"],[class*="dropdown"],[class*="picker"],.field,.form-group');
+  if (container) {
+    const selects = container.querySelectorAll("select");
+    for (const s of selects) {
+      if (s.offsetHeight === 0 || s.offsetParent === null || s.style.display === "none" || s.getAttribute("aria-hidden") === "true") {
+        opts = Array.from(s.options).map(o => o.value).filter(v => v);
+        hiddenSelSelector = "#" + CSS.escape(s.id);
+        break;
+      }
+    }
+  }
+  return { options: opts, hiddenSelectSelector: hiddenSelSelector };
 }
 
 function scanForFields(root, result, topForms, formLabels, context) {
   const ctx = context || { type: "document" };
-  const all = root.querySelectorAll ? root.querySelectorAll("input, textarea, select, button") : [];
+  const all = root.querySelectorAll ? root.querySelectorAll("input, textarea, select, button, a, [role=button]") : [];
   all.forEach(el => {
     if (isFormField(el)) {
       const parentForm = el.closest("form");
@@ -86,12 +111,21 @@ function scanForFields(root, result, topForms, formLabels, context) {
         tag: el.tagName.toLowerCase(), type: el.type || "text",
         name: el.name || "", id: el.id || "",
         placeholder: el.placeholder || "", label: getLabel(el),
+        autocomplete: el.getAttribute("autocomplete") || "",
+        pattern: el.getAttribute("pattern") || "",
+        maxLength: el.maxLength >= 0 ? el.maxLength : "",
         currentValue: el.value, required: el.required || false,
         selector: getUniqueSelector(el),
         options,
+        isCustomSelect: false,
+        hiddenSelectSelector: "",
         formIndex: formIdx,
         formLabel: formIdx >= 0 ? formLabels[formIdx] : null
       };
+      if (entry.tag === "input" && (!entry.options || !entry.options.length)) {
+        const cs = findCustomSelect(el);
+        if (cs) { entry.isCustomSelect = true; entry.options = cs.options; entry.hiddenSelectSelector = cs.hiddenSelectSelector; }
+      }
       if (ctx.type === "shadow") entry.shadowHost = getUniqueSelector(ctx.host);
       if (ctx.type === "iframe") {
         const allIframes = document.querySelectorAll("iframe");

@@ -121,7 +121,30 @@ function autoFillFields(data) {
       if (!field) return;
       var tag = field.tagName.toLowerCase();
       var type = (field.type || '').toLowerCase();
-      if (tag === 'select') {
+      var isCustom = tag === 'input' && (field.getAttribute('role') === 'combobox' || field.getAttribute('aria-haspopup') === 'listbox');
+      if (isCustom) {
+        var hiddenSel = null;
+        var container = field.closest('[class*=select],[class*=dropdown],[class*=picker],.field,.form-group');
+        if (container) {
+          var sels = container.querySelectorAll('select');
+          for (var si = 0; si < sels.length; si++) {
+            if (sels[si].offsetHeight === 0 || sels[si].offsetParent === null || sels[si].style.display === 'none') {
+              hiddenSel = sels[si]; break;
+            }
+          }
+        }
+        if (hiddenSel) {
+          var match = Array.from(hiddenSel.options).some(function(o) { return o.value === item.value; });
+          if (match) { hiddenSel.value = item.value; hiddenSel.dispatchEvent(new Event('change', { bubbles: true })); }
+        }
+        if (ns) ns.call(field, item.value);
+        field.dispatchEvent(new Event('mousedown', { bubbles: true }));
+        field.dispatchEvent(new Event('mouseup', { bubbles: true }));
+        field.dispatchEvent(new Event('click', { bubbles: true }));
+        field.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+        field.dispatchEvent(new Event('change', { bubbles: true }));
+        field.dispatchEvent(new Event('blur', { bubbles: true }));
+      } else if (tag === 'select') {
         var match = Array.from(field.options).some(function(o) { return o.value === item.value; });
         if (match) {
           field.value = item.value;

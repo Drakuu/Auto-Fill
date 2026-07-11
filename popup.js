@@ -86,7 +86,20 @@ function mainWorldFill(data) {
       if (!field) return;
       var tag = field.tagName.toLowerCase();
       var type = (field.type || '').toLowerCase();
-      if (tag === 'select') {
+      if (item.isCustomSelect && item.hiddenSelectSelector) {
+        var hiddenSel = document.querySelector(item.hiddenSelectSelector);
+        if (hiddenSel && hiddenSel.tagName === 'SELECT') {
+          var match = Array.from(hiddenSel.options).some(function(o) { return o.value === item.value; });
+          if (match) { hiddenSel.value = item.value; hiddenSel.dispatchEvent(new Event('change', { bubbles: true })); }
+        }
+        if (ns) ns.call(field, item.value);
+        field.dispatchEvent(new Event('mousedown', { bubbles: true }));
+        field.dispatchEvent(new Event('mouseup', { bubbles: true }));
+        field.dispatchEvent(new Event('click', { bubbles: true }));
+        field.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+        field.dispatchEvent(new Event('change', { bubbles: true }));
+        field.dispatchEvent(new Event('blur', { bubbles: true }));
+      } else if (tag === 'select') {
         var match = Array.from(field.options).some(function(o) { return o.value === item.value; });
         if (match) {
           field.value = item.value;
@@ -108,6 +121,56 @@ function mainWorldFill(data) {
       }
     } catch(e) {}
   });
+}
+
+function mainWorldFindAndClick(strategy) {
+  strategy = strategy || 'auto';
+  try {
+    var all = document.querySelectorAll('button, input[type=submit], input[type=button], input[type=reset], a, [role=button], [onclick], div[class*=btn], span[class*=btn]');
+    console.log('[QF] Candidates found:', all.length);
+    var candidates = [];
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      var tag = el.tagName.toLowerCase();
+      var text = (el.textContent || el.value || '').trim().toLowerCase();
+      var type = (el.type || '').toLowerCase();
+      var cls = (el.className || '').toLowerCase();
+      var onclick = el.getAttribute('onclick');
+      console.log('[QF] ' + i + ': <' + tag + '> type=' + type + ' class="' + cls + '" text="' + text.substring(0, 50) + '" onclick=' + (onclick ? 'yes' : 'no'));
+      if (tag === 'button' || tag === 'input' || cls.includes('btn') || cls.includes('button') || el.getAttribute('role') === 'button' || onclick) {
+        var score = 0;
+        if (type === 'submit') score += 10;
+        if (text.includes('submit') || text.includes('save') || text.includes('send') || text.includes('update') || text.includes('ok') || text.includes('done')) score += 5;
+        if (text.includes('add') || text.includes('create') || text.includes('new')) score += 2;
+        if (onclick) score += 3;
+        if (tag === 'button') score += 2;
+        if (cls.includes('primary') || cls.includes('main') || cls.includes('action')) score += 2;
+        candidates.push({ el: el, score: score, tag: tag, text: text, type: type });
+      }
+    }
+    candidates.sort(function(a, b) { return b.score - a.score; });
+    console.log('[QF] Sorted candidates (score):', candidates.map(function(c) { return c.tag + '[' + c.type + '] "' + c.text.substring(0, 30) + '" score=' + c.score; }));
+    if (candidates.length === 0) { console.log('[QF] No button candidates found'); return; }
+    var btn = candidates[0].el;
+    console.log('[QF] Clicking: <' + candidates[0].tag + '> type=' + candidates[0].type + ' text="' + candidates[0].text.substring(0, 50) + '"');
+    if (strategy === 'click' || strategy === 'auto') { btn.click(); console.log('[QF] .click() done'); }
+    if (strategy === 'dispatch' || strategy === 'auto') {
+      btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+      btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+      btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+      btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+      btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
+      console.log('[QF] events dispatched');
+    }
+    var reactKey = Object.keys(btn).find(function(k) { return k.startsWith('__reactProps') || k.startsWith('__reactEventHandlers'); });
+    if (reactKey && btn[reactKey] && typeof btn[reactKey].onClick === 'function') {
+      try { btn[reactKey].onClick.call(btn, { type: 'click', target: btn, preventDefault: function(){} }); console.log('[QF] React onClick called'); } catch(e) {}
+    }
+    if (strategy === 'submit' || (strategy === 'auto' && btn.type === 'submit')) {
+      var form = btn.closest('form');
+      if (form) { form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); console.log('[QF] form.submit done'); }
+    }
+  } catch(e) { console.log('[QF] Error:', e.message); }
 }
 
 function mainWorldClick(selector, index, strategy) {
@@ -154,7 +217,6 @@ async function ensureCS() {
 async function loadFields() {
   document.getElementById("fillAllBtn").disabled = true;
   document.getElementById("clearAllBtn").disabled = true;
-  document.getElementById("fillSubmitBtn").disabled = true;
   document.getElementById("autoSubmitBtn").disabled = true;
   document.getElementById("fieldList").innerHTML = '<div class="spinner-wrap"><div class="spinner"></div><p class="loading-text">Scanning page...</p></div>';
 
@@ -219,13 +281,13 @@ function renderAll() {
       c.appendChild(section);
 
       group.fields.forEach(({ field: f, idx: i }) => {
-        const typeClass = f.type === "password" ? "type-password" : f.type === "email" ? "type-email" : f.type === "number" ? "type-number" : f.type === "tel" || f.type === "phone" ? "type-phone" : f.type === "url" ? "type-url" : f.type === "date" ? "type-date" : f.type === "textarea" || f.tag === "textarea" ? "type-textarea" : f.tag === "select" ? "type-select" : f.type === "checkbox" ? "type-checkbox" : f.type === "radio" ? "type-radio" : "type-text";
+        const typeClass = f.type === "password" ? "type-password" : f.type === "email" ? "type-email" : f.type === "number" ? "type-number" : f.type === "tel" || f.type === "phone" ? "type-phone" : f.type === "url" ? "type-url" : f.type === "date" ? "type-date" : f.type === "textarea" || f.tag === "textarea" ? "type-textarea" : f.tag === "select" || f.isCustomSelect ? "type-select" : f.type === "checkbox" ? "type-checkbox" : f.type === "radio" ? "type-radio" : "type-text";
         const card = document.createElement("div"); card.className = "field-card " + typeClass;
         const label = document.createElement("div"); label.className = "field-label";
         label.textContent = f.label || f.name || f.id || `Field ${i + 1}`;
         if (f.required) label.innerHTML += ' <span class="required">*</span>';
         const info = document.createElement("div"); info.className = "field-info";
-        info.textContent = `<${f.tag}${f.type ? " type=" + f.type : ""}>`;
+        info.textContent = f.isCustomSelect ? `<custom-select>` : `<${f.tag}${f.type ? " type=" + f.type : ""}>`;
         const row = document.createElement("div"); row.className = "input-row";
         const input = document.createElement("input"); input.className = "field-value";
         input.type = f.type === "password" ? "password" : "text";
@@ -263,7 +325,6 @@ function renderAll() {
   // Enable/disable buttons based on available content, NOT current tab
   document.getElementById("fillAllBtn").disabled = !hasFields;
   document.getElementById("clearAllBtn").disabled = !hasFields;
-  document.getElementById("fillSubmitBtn").disabled = !hasFields || !hasButtons;
   document.getElementById("autoSubmitBtn").disabled = !hasFields || !hasButtons;
 }
 
@@ -274,57 +335,220 @@ function switchTab(tab) {
 }
 
 function randFrom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+function pad(n, w) { return String(n).padStart(w, "0"); }
 
-const words = ["alpha","beta","gamma","delta","epsilon","zeta","eta","theta","iota","kappa","lambda","mu","nu","xi","omicron","pi","rho","sigma","tau","upsilon","phi","chi","psi","omega","test","demo","sample","hello","world","foo","bar","baz","quick","brown","fox","jump","lazy","dog","red","blue","green","yellow","black","white","silver","gold","task","item","note","data","value","user","name","email","pass","key","id","new","edit","view","list","add","create","update","delete","save","cancel","submit","reset","form","page","file","text","number","phone","date","time","url","search","yes","no","on","off","true","false","one","two","three","four","five","admin","manager","moderator","editor","author","contributor","member","guest"];
-const emails = ["@gmail.com","@yahoo.com","@outlook.com","@hotmail.com","@icloud.com","@proton.me","@pm.me","@example.com","@test.com"];
-const countries = ["United States","Canada","United Kingdom","Australia","Germany","France","Japan","Brazil","India","Mexico","Italy","Spain","Netherlands","Sweden","South Korea","Singapore","New Zealand","Switzerland","Norway","Denmark"];
-const cities = ["New York","Los Angeles","Chicago","Houston","Phoenix","London","Manchester","Toronto","Vancouver","Montreal","Sydney","Melbourne","Berlin","Munich","Paris","Lyon","Tokyo","Osaka","Mumbai","Delhi","Sao Paulo","Rio","Milan","Rome","Madrid","Barcelona","Amsterdam","Stockholm","Seoul","Singapore","Zurich","Oslo","Copenhagen"];
-const states = ["California","Texas","Florida","New York","Illinois","Pennsylvania","Ohio","Georgia","North Carolina","Michigan","New Jersey","Virginia","Washington","Arizona","Massachusetts","Tennessee","Indiana","Missouri","Maryland","Wisconsin","Colorado","Minnesota","Alabama","South Carolina","Louisiana","Kentucky","Oregon","Oklahoma","Connecticut","Nevada"];
-const streets = ["Main St","Oak Ave","Elm St","Park Rd","Broadway","High St","Maple Dr","Cedar Ln","Lake View","Sunset Blvd","River Rd","Hill St","Pine Ave","Forest Dr","Meadow Ln"];
+// ---- Procedural generators (data created at runtime, not stored in arrays) ----
 
-function getLabelText(field) {
-  return ((field.label || "") + " " + (field.name || "") + " " + (field.id || "") + " " + (field.placeholder || "")).toLowerCase();
+function genFirst() {
+  const s = ["J","A","M","S","D","C","R","T","E","K","N","L","B","H","P","V","W","G","Z","O"];
+  const m = ["a","o","e","i","u","an","en","in","on","ar","or","el","al","am","em","ad","ed","av","ev","as","es","is","at","et","it","ac","ic","ol","il","ak","ek","ik","ap","ep","ip"];
+  const e = ["n","s","d","t","h","nn","ss","tt","ck","rk","th","nd","ld","rd","st","nt","rt","ll","mm","rl","rn","ry","ro"];
+  return randFrom(s) + randFrom(m) + (Math.random() > 0.45 ? randFrom(m) : "") + randFrom(e);
 }
+function genLast() {
+  const s = ["S","M","W","B","J","H","C","R","A","D","T","G","K","L","P","F","E","N","V","O"];
+  const m = ["i","o","a","e","u","ar","er","or","al","el","il","am","em","im","an","en","in","on","un","ow","aw","ay","ey","le","so","to","man","for","land","wood","field","well","hill","ham","b","l","f","m","p","r","s","t","k","d","g","w","n","y"];
+  const e = ["s","n","r","d","t","l","k","e","y","son","ton","man","er","ley","ett","sen","ham","berg","burg","stein","shire","field","ford","wood","well","hill","land","ward","lyn","ers","ick","art","ark","ink","ers","son","ton","man","ley","ett","sen","ham","by"];
+  return randFrom(s) + randFrom(m) + (Math.random() > 0.3 ? randFrom(e) : "");
+}
+function genEmail() { return genFirst().toLowerCase() + "." + genLast().toLowerCase() + randInt(10, 999) + randFrom(["@gmail.com","@yahoo.com","@outlook.com","@icloud.com","@proton.me","@example.com"]); }
+function genPhone() { return "555-" + pad(randInt(100, 999), 3) + "-" + pad(randInt(1000, 9999), 4); }
+function genCountry() { return randFrom(["United States","Canada","United Kingdom","Australia","Germany","France","Japan","Brazil","India","Mexico","Italy","Spain","Netherlands","Sweden","South Korea","Singapore","New Zealand","Switzerland","Norway","Denmark"]); }
+function genCity() { return randFrom(["New York","Los Angeles","Chicago","Houston","London","Manchester","Toronto","Vancouver","Sydney","Melbourne","Berlin","Munich","Paris","Tokyo","Osaka","Mumbai","Delhi","Sao Paulo","Madrid","Barcelona","Amsterdam","Stockholm","Seoul","Singapore","Zurich","Copenhagen","Rome","Dublin","Dubai","Bangalore","Austin","Denver","Portland","Seattle","Boston","Nashville","Miami","Atlanta","Phoenix","Montreal"]); }
+function genState() { return randFrom(["California","Texas","Florida","New York","Illinois","Pennsylvania","Ohio","Georgia","North Carolina","Michigan","New Jersey","Virginia","Washington","Arizona","Massachusetts","Tennessee","Indiana","Missouri","Maryland","Wisconsin","Colorado","Minnesota","Alabama","South Carolina","Louisiana","Kentucky","Oregon","Oklahoma","Connecticut","Nevada","Utah","Iowa","Kansas","Arkansas","Mississippi","Hawaii","Alaska"]); }
+function genStreet() { return randInt(100, 9999) + " " + randFrom(["Main St","Oak Ave","Elm St","Park Rd","Broadway","High St","Maple Dr","Cedar Ln","Lake View","Sunset Blvd","River Rd","Hill St","Pine Ave","Forest Dr","Meadow Ln","Willow Way","Creek Ct","Springs Blvd","Harbor Dr","Valley Rd"]); }
+function genZip() { return pad(randInt(10000, 99999), 5); }
+function genPassword() { return genFirst().toLowerCase() + genLast().toLowerCase() + randInt(10, 999) + randFrom(["!","@","#","$"]); }
+function genCompany() { return randFrom(["Acme","Globex","Initech","Umbrella","Stark","Wayne","Cyberdyne","Hooli","Dunder","Oscorp","Soylent","Wonka","Aperture","Tyrell","Massive","Nimbus","Gekko","Sterling","Vandelay","Prestige"]) + " " + randFrom(["Corp","Inc","LLC","Industries","Technologies","Group","Labs","Systems","Media","Ventures","Global","Solutions","Dynamics","Works","Enterprises"]); }
+function genJob() { return randFrom(["Senior","Lead","Principal","Staff","Junior","",""]) + (Math.random() > 0.3 ? " " : "") + randFrom(["Software Engineer","Product Manager","Data Analyst","UX Designer","DevOps Engineer","QA Tester","Technical Writer","Solutions Architect","Security Analyst","ML Engineer","Full Stack Developer","Frontend Developer","Backend Developer","Engineering Manager","Product Designer","Scrum Master","Business Analyst","Marketing Manager","Sales Associate","Accountant","HR Coordinator","Consultant","Operations Manager","Creative Director","Research Scientist","Systems Admin","Network Engineer","Support Specialist","Data Scientist","Cloud Architect"]); }
+function genUrl() { return "https://" + genFirst().toLowerCase() + randFrom(["com","net","io","org","co","app"]); }
+function genDate() { return "199" + randInt(0, 9) + "-" + pad(randInt(1, 12), 2) + "-" + pad(randInt(1, 28), 2); }
+function genLorem() { return "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."; }
+function genWord() { return randFrom(["alpha","beta","gamma","delta","omega","sigma","prime","edge","peak","core","base","nova","pulse","drive","wave","flux","grid","node","byte","hive","synth","neo","zen","ark","forge","tide","bold","cast","peak","dawn","echo"]); }
+
+// ---- Detectors (field → generator key) ----
+// ---- Detection tables (add rows to extend) ----
+
+const acMap = {
+  "given-name":"first","first-name":"first","cc-given-name":"first",
+  "family-name":"last","last-name":"last","cc-family-name":"last",
+  "name":"name","cc-name":"name",
+  "nickname":"username","username":"username",
+  "email":"email",
+  "tel":"phone","tel-national":"phone","tel-area-code":"phone","home-phone":"phone","mobile":"phone","work-phone":"phone",
+  "country":"country","country-name":"country",
+  "address-level1":"state","address-level2":"city",
+  "postal-code":"zip","zip":"zip",
+  "street-address":"street","address-line1":"street","address-line2":"apt","address-line3":"street",
+  "organization":"company","company":"company",
+  "organization-title":"job","job-title":"job",
+  "bday":"date","bday-day":"date","bday-month":"month","bday-year":"year",
+  "sex":"gender","gender":"gender",
+  "url":"url",
+  "cc-number":"ccnum","cc-exp":"ccexp","cc-exp-month":"month","cc-exp-year":"year",
+  "cc-csc":"cvv","cc-security-code":"cvv","cc-type":"cctype",
+  "transaction-currency":"currency","transaction-amount":"amount",
+  "one-time-code":"otp",
+  "new-password":"password","current-password":"password",
+  "language":"lang","photo":"url"
+};
+const typeStrictMap = { "email":"email", "tel":"phone", "phone":"phone", "url":"url", "password":"password" };
+const typeLooseMap = { "number":"number", "range":"number", "date":"date", "time":"time", "datetime-local":"datetime", "month":"month", "week":"week", "color":"color", "checkbox":"checkbox", "radio":"radio" };
+
+const labelRules = [
+  // IDs & documents
+  [/cnic|nic|national.?id|identity.?number|id.?number/, "cnic"],
+  [/ssn|social.?security/, "ssn"],
+  [/passport/, "passport"],
+  [/pan.?number|pan.?card|pan.?no/, "pan"],
+  [/aadhaar|aadhar|uid/, "aadhaar"],
+  [/tax.?id|taxid|tin|e.?in/, "taxid"],
+  [/driver.?lic|dl.?number|lic.?number|driving.?lic/, "drivers"],
+  [/vin|vehicle.?id|chassis.?no/, "vin"],
+  // Financial
+  [/credit.?card|debit.?card|cc.?number|card.?number/, "ccnum"],
+  [/cvv|cvc|csc|security.?code|secure.?code/, "cvv"],
+  [/expir|exp\.?|valid.?thru|valid.?till|mm.?yy/, "ccexp"],
+  [/account.?no|account.?number|acc.?no|iban/, "acct"],
+  [/routing|aba.?number|sort.?code/, "routing"],
+  [/swift|bic|bank.?code/, "swift"],
+  // Location
+  [/pincode|postal|postcode|zip/, "zip"],
+  [/country|nation/, "country"],
+  [/city|town/, "city"],
+  [/state|province|region/, "state"],
+  [/address|street|addr/, "street"],
+  [/apt|unit|suite|flat/, "apt"],
+  [/room|floor|level|building.?no/, "room"],
+  // Personal
+  [/birth|dob|born|date.?of.?birth/, "date"],
+  [/gender|sex/, "gender"],
+  [/age/, "age"],
+  [/full.?name|your.?name|enter.?name/, "name"],
+  [/first.?name|fname|given/, "first"],
+  [/last.?name|lname|family|surname/, "last"],
+  [/prefix|honorific|title.?mr|mr.?ms|salutation/, "prefix"],
+  [/suffix|jr|sr|ii|iii|iv/, "suffix"],
+  [/username|user.?name|login|nick/, "username"],
+  [/nationality|citizen/, "nationality"],
+  [/status(?!.*(?:family|marital))/, "genstatus"],
+  [/marital|married|single/, "marital"],
+  [/education|degree|school|university|college|major|qualification/, "edulevel"],
+  // Work
+  [/company|organization|org|employer|firm|works? at|department/, "company"],
+  [/job.?title|position|designation|occupation|role/, "job"],
+  // Contact
+  [/website|web.?site|homepage|blog.?url/, "url"],
+  [/fax/, "phone"],
+  [/mobile|cell|cellular|phone|telephone|tel|contact.?no|contact.?number|whatsapp/, "phone"],
+  // Products & orders
+  [/sku|product.?id|item.?no|part.?no|model.?no/, "sku"],
+  [/order.?no|order.?id|ref.?no|invoice|ticket.?no/, "order"],
+  [/coupon|promo|discount.?code|voucher/, "coupon"],
+  [/qty|quantity|count|total.?items/, "qty"],
+  [/weight|mass|kg|lbs|pounds/, "weight"],
+  [/height|ft|inches|cm/, "height"],
+  [/temp|temperature|celsius|fahrenheit/, "temp"],
+  [/color|colour|hue|shade/, "colorword"],
+  [/plate.?no|license.?plate|reg.?no/, "plate"],
+  // Text content
+  [/subject|title/, "text"],
+  [/message|comment|enquiry|inquiry|feedback|description|details|note/, "lorem"],
+  [/search/, "empty"],
+  // Catch-all (low priority)
+  [/name/, "name"],
+  [/email|e-?mail/, "email"],
+  [/phone|telephone|mobile|cell|contact/, "phone"],
+];
+
+const acDetect = (f) => acMap[(f.autocomplete || "").toLowerCase()] || null;
+const typeStrict = (f) => typeStrictMap[f.type || ""] || null;
+const typeLoose = (f) => { if (f.tag === "textarea") return "lorem"; return typeLooseMap[f.type || ""] || null; };
+const labelDetect = (f) => {
+  const l = ((f.label||"") + " " + (f.name||"") + " " + (f.id||"") + " " + (f.placeholder||"") + " " + (f.autocomplete||"")).toLowerCase();
+  for (const [re, key] of labelRules) { if (re.test(l)) return key; }
+  return null;
+};
+
+const detectors = [acDetect, typeStrict, labelDetect, typeLoose];
+
+const generators = {
+  "first":   () => genFirst(),
+  "last":    () => genLast(),
+  "name":    () => genFirst() + " " + genLast(),
+  "username":() => genFirst().toLowerCase() + genLast().toLowerCase() + randInt(10, 999),
+  "email":   () => genEmail(),
+  "phone":   () => genPhone(),
+  "country": () => genCountry(),
+  "state":   () => genState(),
+  "city":    () => genCity(),
+  "zip":     () => genZip(),
+  "street":  () => genStreet(),
+  "apt":     () => "Apt " + randInt(1, 20),
+  "date":    () => genDate(),
+  "month":   () => "2026-" + pad(randInt(1, 12), 2),
+  "year":    () => String(randInt(1970, 2010)),
+  "time":    () => pad(randInt(8, 19), 2) + ":" + pad(randInt(0, 3) * 15, 2),
+  "datetime":() => "2026-" + pad(randInt(1, 12), 2) + "-" + pad(randInt(1, 28), 2) + "T" + pad(randInt(8, 19), 2) + ":00",
+  "week":    () => "2026-W" + pad(randInt(1, 52), 2),
+  "color":   () => "#" + Math.floor(Math.random() * 16777215).toString(16).padStart(6, "0"),
+  "number":  () => String(randInt(1, 9999)),
+  "gender":  () => randFrom(["Male", "Female", "Other"]),
+  "company": () => genCompany(),
+  "job":     () => genJob(),
+  "age":     () => String(randInt(18, 75)),
+  "url":     () => genUrl(),
+  "password":() => genPassword(),
+  "lorem":   () => genLorem(),
+  "text":    (f) => genWord() + " " + genWord() + (f && f.maxLength > 10 ? " " + genWord() : ""),
+  "cnic":    () => pad(randInt(10000, 99999), 5) + "-" + pad(randInt(1000000, 9999999), 7) + "-" + randInt(0, 9),
+  "ssn":     () => pad(randInt(100, 999), 3) + "-" + pad(randInt(10, 99), 2) + "-" + pad(randInt(1000, 9999), 4),
+  "passport":() => String.fromCharCode(randInt(65, 90)) + String.fromCharCode(randInt(65, 90)) + pad(randInt(1000000, 9999999), 7),
+  "pan":     () => "A" + String.fromCharCode(randInt(66, 90)) + String.fromCharCode(randInt(66, 90)) + String.fromCharCode(randInt(66, 90)) + "P" + String.fromCharCode(randInt(65, 90)) + pad(randInt(1000, 9999), 4),
+  "aadhaar": () => pad(randInt(1000, 9999), 4) + " " + pad(randInt(1000, 9999), 4) + " " + pad(randInt(1000, 9999), 4),
+  "ccnum":   () => "4111-1111-1111-" + pad(randInt(1000, 9999), 4),
+  "cvv":     () => pad(randInt(100, 999), 3),
+  "ccexp":   () => pad(randInt(1, 12), 2) + "/" + (new Date().getFullYear() + randInt(1, 5)),
+  "cctype":  () => randFrom(["Visa", "MasterCard", "AmEx", "Discover"]),
+  "currency":() => "USD",
+  "amount":  () => (Math.random() * 500 + 10).toFixed(2),
+  "otp":     () => pad(randInt(100000, 999999), 6),
+  "lang":    () => "English",
+  "options": (f) => randFrom(f.options),
+  "checkbox":() => "on",
+  "radio":   (f) => f.options && f.options.length ? randFrom(f.options) : "Yes",
+  "empty":   () => "",
+  "taxid":   () => pad(randInt(10, 99), 2) + "-" + pad(randInt(1000000, 9999999), 7),
+  "drivers": () => "D" + pad(randInt(100, 999), 3) + "-" + pad(randInt(1000, 9999), 4) + "-" + pad(randInt(1000, 9999), 4),
+  "vin":     () => { const c="ABCDEFGHJKLMNPRSTUVWXYZ0123456789"; return Array.from({length:17},()=>c[randInt(0,c.length-1)]).join(""); },
+  "acct":    () => pad(randInt(10000000, 99999999), 8),
+  "routing": () => pad(randInt(10000000, 99999999), 8),
+  "swift":   () => String.fromCharCode(randInt(65,90),randInt(65,90),randInt(65,90),randInt(65,90)) + "US" + String.fromCharCode(randInt(65,90),randInt(65,90)) + "XXX",
+  "room":    () => "Room " + randInt(100, 9999),
+  "qty":     () => String(randInt(1, 100)),
+  "weight":  () => randInt(50, 350) + " lbs",
+  "height":  () => randInt(4, 6) + "'" + randInt(0, 11) + '"',
+  "temp":    () => randInt(60, 100) + "\u00B0F",
+  "colorword":() => randFrom(["Red","Blue","Green","Black","White","Silver","Gold","Navy","Teal","Purple","Orange","Pink","Brown","Gray","Coral","Indigo","Violet","Cyan","Lime","Maroon"]),
+  "sku":     () => "SKU-" + pad(randInt(10000, 99999), 5),
+  "order":   () => "ORD-" + pad(randInt(100000, 999999), 6),
+  "coupon":  () => genWord().toUpperCase() + randInt(10, 99),
+  "edulevel":() => randFrom(["High School","Associate's","Bachelor's","Master's","PhD","Certificate","Diploma","MBA","MD","JD"]),
+  "marital": () => randFrom(["Single","Married","Divorced","Widowed","Separated"]),
+  "prefix":  () => randFrom(["Mr.","Ms.","Mrs.","Dr.","Prof.","Capt.","Col.","Hon."]),
+  "suffix":  () => randFrom(["Jr.","Sr.","II","III","IV","PhD","MD","Esq.","CPA"]),
+  "nationality":() => randFrom(["American","Canadian","British","Australian","German","French","Japanese","Brazilian","Indian","Mexican","Italian","Spanish","Dutch","Swedish","South Korean","Chinese","Russian","Swiss"]),
+};
 
 function generateRandomValue(field) {
   if (field.options && field.options.length > 0) return randFrom(field.options);
-
-  const label = getLabelText(field);
-  const t = field.type || "text";
-
-  // Label-based detection (country, city, state, zip, address, etc.)
-  if (/country|nation/i.test(label)) return randFrom(countries);
-  if (/city|town/i.test(label)) return randFrom(cities);
-  if (/state|province|region/i.test(label)) return randFrom(states);
-  if (/zip|postal|postcode|pincode/i.test(label)) return String(Math.floor(Math.random() * 90000) + 10000);
-  if (/address|street|addr/i.test(label)) return Math.floor(Math.random() * 9999) + 1 + " " + randFrom(streets);
-  if (/birth|dob|born/i.test(label)) return "1990-" + String(Math.floor(Math.random() * 12) + 1).padStart(2,"0") + "-" + String(Math.floor(Math.random() * 28) + 1).padStart(2,"0");
-  if (/gender|sex/i.test(label)) return randFrom(["Male","Female","Other","Prefer not to say"]);
-  if (/company|organization|org|employer|firm/i.test(label)) return randFrom(["Acme Corp","Globex Inc","Initech","Umbrella Corp","Stark Industries","Wayne Enterprises","Cyberdyne","Hooli","Dunder Mifflin","Sterling Cooper"]);
-
-  // Type-based detection
-  if (t === "email") return randFrom(words) + "." + randFrom(words) + Math.floor(Math.random() * 999) + randFrom(emails);
-  if (t === "number" || t === "range") return String(Math.floor(Math.random() * 9999) + 1);
-  if (t === "tel" || t === "phone") return "555-" + String(Math.floor(Math.random() * 900) + 100) + "-" + String(Math.floor(Math.random() * 9000) + 1000);
-  if (t === "url") return "https://example.com/" + randFrom(words);
-  if (t === "password") return randFrom(words) + randFrom(words) + Math.floor(Math.random() * 999);
-  if (t === "date") return "2026-" + String(Math.floor(Math.random() * 12) + 1).padStart(2,"0") + "-" + String(Math.floor(Math.random() * 28) + 1).padStart(2,"0");
-  if (t === "time") return String(Math.floor(Math.random() * 12) + 8).padStart(2,"0") + ":" + String(Math.floor(Math.random() * 4) * 15).padStart(2,"0");
-  if (t === "datetime-local") return "2026-" + String(Math.floor(Math.random() * 12) + 1).padStart(2,"0") + "-" + String(Math.floor(Math.random() * 28) + 1).padStart(2,"0") + "T" + String(Math.floor(Math.random() * 12) + 8).padStart(2,"0") + ":00";
-  if (t === "month") return "2026-" + String(Math.floor(Math.random() * 12) + 1).padStart(2,"0");
-  if (t === "week") return "2026-W" + String(Math.floor(Math.random() * 52) + 1).padStart(2,"0");
-  if (t === "color") return "#" + Math.floor(Math.random() * 16777215).toString(16).padStart(6,"0");
-  if (t === "textarea" || field.tag === "textarea") return "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.";
-  if (t === "checkbox") return "on";
-  if (t === "radio") return randFrom(field.options || ["Yes", "No"]);
-
-  // Search field
-  if (/search/i.test(label)) return "";
-  // Name field
-  if (/first.?name|fname|given/i.test(label)) return randFrom(["John","Jane","Alex","Sarah","Michael","Emma","David","Sophia","James","Olivia","Robert","Ava","William","Mia","Daniel","Isabella","Thomas","Charlotte","Christopher","Amelia"]);
-  if (/last.?name|lname|family|surname/i.test(label)) return randFrom(["Smith","Johnson","Williams","Brown","Jones","Garcia","Miller","Davis","Rodriguez","Martinez","Wilson","Anderson","Taylor","Thomas","Moore","Jackson","Martin","Lee","White","Harris"]);
-
-  return randFrom(words) + " " + randFrom(words) + " " + randFrom(words);
+  for (const detect of detectors) {
+    const key = detect(field);
+    if (key && generators[key]) return generators[key](field);
+  }
+  const gen = generators["text"];
+  return gen(field);
 }
 
 function autoGenerateValues() {
@@ -341,18 +565,25 @@ function autoGenerateValues() {
 async function autoFillAndSubmit() {
   autoGenerateValues();
   const count = await fillWithSequencing();
-  const btn = buttons.find(b => b.type === "submit" || /submit|save|send|add/i.test(b.label)) || buttons[0];
-  if (btn) {
-    await execInMainWorld("click", { selector: btn.selector, index: btn.index });
+  const strategy = document.getElementById("submitStrategy")?.value || "auto";
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) return;
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: mainWorldFindAndClick,
+      args: [strategy],
+      world: "MAIN"
+    });
     showStatus("Auto filled & submitted!");
-  } else {
-    showStatus("Auto filled (no button)", "warning");
+  } catch {
+    showStatus("Auto filled (no submit button found)", "warning");
   }
 }
 
 async function doFill(idx) {
   const f = fields[idx];
-  const res = await execInMainWorld("fill", [{ selector: f.selector, index: f.index, value: f.fillValue || "" }]);
+  const res = await execInMainWorld("fill", [{ selector: f.selector, index: f.index, value: f.fillValue || "", isCustomSelect: f.isCustomSelect, hiddenSelectSelector: f.hiddenSelectSelector }]);
   if (res?.success) markFilled(idx);
   showStatus("Filled!");
 }
@@ -420,7 +651,7 @@ async function fillWithSequencing() {
   var selIdxs = [], normIdxs = [];
   fields.forEach(function(f, i) {
     if (f.fillValue === undefined || f.fillValue === null) return;
-    if (f.tag === 'select') selIdxs.push(i);
+    if (f.tag === 'select' || f.isCustomSelect) selIdxs.push(i);
     else normIdxs.push(i);
   });
   var filled = 0;
@@ -430,10 +661,10 @@ async function fillWithSequencing() {
     if (res && res.success) { normIdxs.forEach(function(i) { markFilled(i); }); filled += normIdxs.length; }
   }
   if (selIdxs.length > 0) {
-    var selData = selIdxs.map(function(i) { return { selector: fields[i].selector, index: fields[i].index, value: fields[i].fillValue, fillIdx: i }; });
+    var selData = selIdxs.map(function(i) { return { selector: fields[i].selector, index: fields[i].index, value: fields[i].fillValue, isCustomSelect: fields[i].isCustomSelect, hiddenSelectSelector: fields[i].hiddenSelectSelector, fillIdx: i }; });
     for (var i = 0; i < selData.length; i++) {
       var item = selData[i];
-      var res2 = await execInMainWorld("fill", [{ selector: item.selector, index: item.index, value: item.value }]);
+      var res2 = await execInMainWorld("fill", [{ selector: item.selector, index: item.index, value: item.value, isCustomSelect: item.isCustomSelect, hiddenSelectSelector: item.hiddenSelectSelector }]);
       if (res2 && res2.success) { markFilled(item.fillIdx); filled++; }
       if (i + 1 < selData.length) {
         await new Promise(function(r) { setTimeout(r, 500); });
@@ -445,6 +676,7 @@ async function fillWithSequencing() {
 }
 
 async function fillAll() {
+  autoGenerateValues();
   var count = await fillWithSequencing();
   showStatus(count + " field" + (count !== 1 ? "s" : "") + " filled");
 }
@@ -473,17 +705,6 @@ async function doFillClick(idx) {
   const b = buttons[idx];
   await execInMainWorld("click", { selector: b.selector, index: b.index });
   showStatus("Done!");
-}
-
-async function fillAndSubmit() {
-  const count = await fillWithSequencing();
-  const btn = buttons.find(b => b.type === "submit" || /submit|save|send|add/i.test(b.label)) || buttons[0];
-  if (btn) {
-    await execInMainWorld("click", { selector: btn.selector, index: btn.index });
-    showStatus("Submitted!");
-  } else {
-    showStatus("Filled (no button)", "warning");
-  }
 }
 
 function getProfileKey(host) { return "profiles_" + host; }
@@ -656,7 +877,6 @@ document.getElementById("searchBar").addEventListener("input", () => {
 document.getElementById("refreshBtn").addEventListener("click", loadFields);
 document.getElementById("fillAllBtn").addEventListener("click", fillAll);
 document.getElementById("clearAllBtn").addEventListener("click", clearAll);
-document.getElementById("fillSubmitBtn").addEventListener("click", fillAndSubmit);
 document.getElementById("autoSubmitBtn").addEventListener("click", autoFillAndSubmit);
 document.getElementById("saveProfileBtn").addEventListener("click", saveProfile);
 document.getElementById("loadProfileBtn").addEventListener("click", () => {

@@ -228,6 +228,17 @@ async function autoLoadProfile() {
 
 async function loadProfile() { await autoLoadProfile(); showStatus("Loaded"); }
 
+function showVersion() {
+  const m = chrome.runtime.getManifest();
+  document.getElementById("versionDisplay").textContent = "v" + m.version;
+  chrome.storage.local.get(["updateAvailable"], (res) => {
+    if (res.updateAvailable) {
+      document.getElementById("newVersion").textContent = res.updateAvailable;
+      document.getElementById("updateBanner").style.display = "flex";
+    }
+  });
+}
+
 document.getElementById("refreshBtn").addEventListener("click", loadFields);
 document.getElementById("fillAllBtn").addEventListener("click", fillAll);
 document.getElementById("clearAllBtn").addEventListener("click", clearAll);
@@ -235,4 +246,8 @@ document.getElementById("fillSubmitBtn").addEventListener("click", fillAndSubmit
 document.getElementById("autoSubmitBtn").addEventListener("click", autoFillAndSubmit);
 document.getElementById("saveProfileBtn").addEventListener("click", saveProfile);
 document.getElementById("loadProfileBtn").addEventListener("click", loadProfile);
-document.addEventListener("DOMContentLoaded", loadFields);
+document.getElementById("reloadExtBtn").addEventListener("click", () => chrome.runtime.reload());
+document.getElementById("openRepoBtn").addEventListener("click", () => {
+  chrome.tabs.create({ url: "https://github.com/Drakuu/Auto-Fill" });
+});
+document.addEventListener("DOMContentLoaded", () => { showVersion(); loadFields(); });

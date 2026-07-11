@@ -12,6 +12,10 @@
       <button id="refreshBtn" class="icon-btn" title="Refresh fields">↻</button>
     </div>
     <p class="subtitle" id="currentPage">Scanning page...</p>
+    <div id="updateBanner" class="update-banner" style="display:none">
+      <span>📦 Update v<span id="newVersion"></span> available</span>
+      <button id="openRepoBtn" class="update-btn">View Changes</button>
+    </div>
 
     <div id="fieldList"></div>
 
@@ -28,6 +32,10 @@
     </div>
 
     <div id="status" class="status"></div>
+    <div class="footer-bar">
+      <span class="ver" id="versionDisplay">v1.0.0</span>
+      <button id="reloadExtBtn" class="reload-btn" title="Reload extension after git pull">↻ Reload</button>
+    </div>
   </div>
   <script src="popup.js"></script>
 </body>

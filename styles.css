@@ -274,3 +274,63 @@ h1 {
 .status.warning {
   color: #e85d04;
 }
+
+.footer-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid #e9ecef;
+}
+
+.ver {
+  font-size: 10px;
+  color: #adb5bd;
+}
+
+.reload-btn {
+  font-size: 10px;
+  padding: 3px 8px;
+  background: none;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  color: #6c757d;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.reload-btn:hover {
+  background: #4361ee;
+  color: #fff;
+  border-color: #4361ee;
+}
+
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #856404;
+}
+
+.update-btn {
+  font-size: 10px;
+  padding: 3px 8px;
+  background: #ffc107;
+  border: none;
+  border-radius: 4px;
+  color: #856404;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.update-btn:hover {
+  background: #e0a800;
+}

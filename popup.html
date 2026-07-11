@@ -53,10 +53,24 @@
       <button id="clearAllBtn" disabled>Clear</button>
     </div>
 
-    <div class="profile-actions">
-      <button id="saveProfileBtn">Save Profile</button>
-      <button id="loadProfileBtn">Load Profile</button>
+    <div class="profile-section">
+      <div class="profile-row">
+        <input id="profileName" class="profile-input" type="text" value="Default" placeholder="Profile name">
+        <button id="saveProfileBtn" class="profile-btn">Save</button>
+      </div>
+      <div class="profile-row">
+        <select id="profileSelect" class="profile-select">
+          <option value="">-- Load profile --</option>
+        </select>
+        <button id="loadProfileBtn" class="profile-btn">Load</button>
+        <button id="deleteProfileBtn" class="profile-btn danger">Delete</button>
+      </div>
+      <div class="profile-row">
+        <button id="exportProfilesBtn" class="profile-btn">Export All</button>
+        <button id="importProfilesBtn" class="profile-btn">Import</button>
+      </div>
     </div>
+    <input id="importFileInput" type="file" accept=".json" style="display:none">
 
     <div id="status" class="status"></div>
     <div class="footer-bar">

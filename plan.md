@@ -1,11 +1,11 @@
 # Quick Fill — Improvement Plan
 
-## P0 — Architecture: Replace inject.js with world:"MAIN" executeScript
-- [ ] Remove `content_scripts` from manifest.json
-- [ ] Remove `inject.js` and `web_accessible_resources`
-- [ ] Use `chrome.scripting.executeScript` with `world: "MAIN"` directly from content.js
-- [ ] Eliminate hidden div bridge (`__qf_action`)
-- [ ] Simplify two-way messaging
+## P0 — Architecture: Replace inject.js with world:"MAIN" executeScript ✓
+- [x] Remove `content_scripts` from manifest.json (kept — still needed for DOM scanning)
+- [x] Remove `inject.js` and `web_accessible_resources`
+- [x] Use `chrome.scripting.executeScript` with `world: "MAIN"` directly from popup.js
+- [x] Eliminate hidden div bridge (`__qf_action`)
+- [x] Simplify two-way messaging (content.js only handles ping + getFormFields)
 
 ## P1 — GUI: Modernize popup UI ✓
 - [x] Dark mode + light mode toggle (persisted in storage)
@@ -18,18 +18,18 @@
 - [x] Dynamic height (remove `max-height: 520px` lock)
 - [x] Loading spinner instead of text
 
-## P1 — Performance: Cache and reduce DOM thrash
-- [ ] Cache `Object.getOwnPropertyDescriptor` once in main-world script
-- [ ] Reuse single hidden element instead of create+remove each action
-- [ ] Use XPath or data-attribute selectors instead of long CSS paths
-- [ ] Replace `setTimeout` waits with promise-based resolution
+## P1 — Performance: Cache and reduce DOM thrash ✓
+- [x] Cache `Object.getOwnPropertyDescriptor` once in main-world script
+- [x] ~Reuse single hidden element~ (eliminated by P0 — inject.js removed)
+- [x] Use index-based fallback instead of long CSS paths (selector simplified to id/name only)
+- [x] ~Replace setTimeout waits~ (eliminated by P0 — direct executeScript)
 
-## P2 — Features: Named profiles + Import/Export
-- [ ] Save multiple named profiles per domain (not just auto-save)
-- [ ] Profile picker dropdown in popup
-- [ ] Export profiles as JSON file
-- [ ] Import profiles from JSON file
-- [ ] Delete profile button
+## P2 — Features: Named profiles + Import/Export ✓
+- [x] Save multiple named profiles per domain (not just auto-save)
+- [x] Profile picker dropdown in popup
+- [x] Export profiles as JSON file
+- [x] Import profiles from JSON file
+- [x] Delete profile button
 
 ## P2 — Features: Better form detection
 - [ ] Shadow DOM field recursion

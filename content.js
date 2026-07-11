@@ -17,37 +17,7 @@ function getLabel(el) {
 function getUniqueSelector(el) {
   if (el.id) return "#" + CSS.escape(el.id);
   if (el.name) return el.tagName.toLowerCase() + '[name="' + CSS.escape(el.name) + '"]';
-  let path = [];
-  let current = el;
-  while (current && current !== document.body && current !== document.documentElement) {
-    let sel = current.tagName.toLowerCase();
-    if (current.id) { path.unshift("#" + CSS.escape(current.id)); break; }
-    const p = current.parentElement;
-    if (p) {
-      const sibs = Array.from(p.children).filter(s => s.tagName === current.tagName);
-      if (sibs.length > 1) sel += ":nth-of-type(" + (sibs.indexOf(current) + 1) + ")";
-    }
-    path.unshift(sel);
-    current = current.parentElement;
-  }
-  return path.join(" > ");
-}
-
-function execInMainWorld(type, data, selector, index) {
-  const dataEl = document.createElement("div");
-  dataEl.id = "__qf_action";
-  dataEl.style.display = "none";
-  dataEl.textContent = JSON.stringify({ type, data, selector, index });
-  document.documentElement.appendChild(dataEl);
-
-  const script = document.createElement("script");
-  script.src = chrome.runtime.getURL("inject.js");
-  document.documentElement.appendChild(script);
-  script.addEventListener("load", () => {
-    script.remove();
-    const rem = document.getElementById("__qf_action");
-    if (rem) rem.remove();
-  });
+  return ""; // fallback to index-based lookup in mainWorldFill
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -93,18 +63,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     sendResponse({ fields, buttons, url: window.location.href });
     return;
-  }
-
-  if (message.action === "fillAllFields") {
-    execInMainWorld("fill", message.data);
-    setTimeout(() => sendResponse({ success: true }), 300);
-    return true;
-  }
-
-  if (message.action === "clickButton") {
-    execInMainWorld("click", null, message.selector, message.index);
-    setTimeout(() => sendResponse({ success: true }), 200);
-    return true;
   }
 
   sendResponse({ success: false, error: "Unknown action" });

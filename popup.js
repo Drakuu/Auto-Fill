@@ -24,6 +24,71 @@ async function sendMsg(msg) {
   }
 }
 
+async function execInMainWorld(type, payload) {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) return { success: false };
+    if (type === "fill") {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: mainWorldFill,
+        args: [payload],
+        world: "MAIN"
+      });
+    } else if (type === "click") {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: mainWorldClick,
+        args: [payload.selector, payload.index],
+        world: "MAIN"
+      });
+    }
+    return { success: true };
+  } catch {
+    return { success: false };
+  }
+}
+
+function mainWorldFill(data) {
+  var ns = (Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value') || {}).set
+        || (Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value') || {}).set;
+  (data || []).forEach(function(item) {
+    try {
+      var field = null;
+      if (item.selector) try { field = document.querySelector(item.selector); } catch(e) {}
+      if (!field) {
+        var all = document.querySelectorAll('input:not([type=submit]):not([type=button]):not([type=reset]):not([type=hidden]):not([type=file]):not([type=image]), textarea, select');
+        field = all[item.index];
+      }
+      if (!field) return;
+      if (field.tagName.toLowerCase() === 'select') {
+        var match = Array.from(field.options).some(function(o) { return o.value === item.value; });
+        if (match) field.value = item.value;
+        field.dispatchEvent(new Event('change', { bubbles: true }));
+      } else {
+        if (ns) ns.call(field, item.value);
+        field.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+      }
+    } catch(e) {}
+  });
+}
+
+function mainWorldClick(selector, index) {
+  try {
+    var btn = null;
+    if (selector) try { btn = document.querySelector(selector); } catch(e) {}
+    if (!btn) {
+      var all = document.querySelectorAll('button, input[type=submit], input[type=button], input[type=reset]');
+      btn = all[index];
+    }
+    if (!btn) return;
+    btn.click();
+    btn.dispatchEvent(new Event('click', { bubbles: true }));
+    var form = btn.closest('form');
+    if (form) form.dispatchEvent(new Event('submit', { bubbles: true }));
+  } catch(e) {}
+}
+
 async function ensureCS() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return false;
@@ -199,11 +264,11 @@ function autoGenerateValues() {
 async function autoFillAndSubmit() {
   autoGenerateValues();
   const data = fields.map(f => ({ selector: f.selector, index: f.index, value: f.fillValue || "" }));
-  const res = await sendMsg({ action: "fillAllFields", data });
+  const res = await execInMainWorld("fill", data);
   if (res?.success) fields.forEach((_, i) => markFilled(i));
   const btn = buttons.find(b => b.type === "submit" || /submit|save|send|add/i.test(b.label)) || buttons[0];
   if (btn) {
-    await sendMsg({ action: "clickButton", selector: btn.selector, index: btn.index });
+    await execInMainWorld("click", { selector: btn.selector, index: btn.index });
     showStatus("Auto filled & submitted!");
   } else {
     showStatus("Auto filled (no button)", "warning");
@@ -212,7 +277,7 @@ async function autoFillAndSubmit() {
 
 async function doFill(idx) {
   const f = fields[idx];
-  const res = await sendMsg({ action: "fillAllFields", data: [{ selector: f.selector, index: f.index, value: f.fillValue || "" }] });
+  const res = await execInMainWorld("fill", [{ selector: f.selector, index: f.index, value: f.fillValue || "" }]);
   if (res?.success) markFilled(idx);
   showStatus("Filled!");
 }
@@ -232,14 +297,14 @@ function markFilled(idx) {
 
 async function fillAll() {
   const data = fields.map(f => ({ selector: f.selector, index: f.index, value: f.fillValue || "" }));
-  const res = await sendMsg({ action: "fillAllFields", data });
+  const res = await execInMainWorld("fill", data);
   if (res?.success) fields.forEach((_, i) => markFilled(i));
   showStatus("All filled");
 }
 
 async function clearAll() {
   const data = fields.map(f => ({ selector: f.selector, index: f.index, value: "" }));
-  await sendMsg({ action: "fillAllFields", data });
+  await execInMainWorld("fill", data);
   fields.forEach(f => f.fillValue = "");
   document.querySelectorAll(".field-value").forEach(el => el.value = "");
   document.querySelectorAll(".field-card.filled").forEach(c => {
@@ -252,51 +317,153 @@ async function clearAll() {
 
 async function doClick(idx) {
   const b = buttons[idx];
-  await sendMsg({ action: "clickButton", selector: b.selector, index: b.index });
+  await execInMainWorld("click", { selector: b.selector, index: b.index });
   showStatus("Clicked!");
 }
 
 async function doFillClick(idx) {
   const data = fields.map(f => ({ selector: f.selector, index: f.index, value: f.fillValue || "" }));
-  const res = await sendMsg({ action: "fillAllFields", data });
+  const res = await execInMainWorld("fill", data);
   if (res?.success) fields.forEach((_, i) => markFilled(i));
   const b = buttons[idx];
-  await sendMsg({ action: "clickButton", selector: b.selector, index: b.index });
+  await execInMainWorld("click", { selector: b.selector, index: b.index });
   showStatus("Done!");
 }
 
 async function fillAndSubmit() {
   const data = fields.map(f => ({ selector: f.selector, index: f.index, value: f.fillValue || "" }));
-  const res = await sendMsg({ action: "fillAllFields", data });
+  const res = await execInMainWorld("fill", data);
   if (res?.success) fields.forEach((_, i) => markFilled(i));
 
   const btn = buttons.find(b => b.type === "submit" || /submit|save|send|add/i.test(b.label)) || buttons[0];
   if (btn) {
-    await sendMsg({ action: "clickButton", selector: btn.selector, index: btn.index });
+    await execInMainWorld("click", { selector: btn.selector, index: btn.index });
     showStatus("Submitted!");
   } else {
     showStatus("Filled (no button)", "warning");
   }
 }
 
+function getProfileKey(host) { return "profiles_" + host; }
+
+async function getAllProfiles() {
+  const host = getHostname(currentUrl);
+  const key = getProfileKey(host);
+  const res = await chrome.storage.sync.get([key]);
+  let profiles = res[key];
+
+  // Migrate old single-profile format
+  if (!profiles) {
+    const old = await chrome.storage.sync.get(["p_" + host]);
+    if (old["p_" + host]) {
+      profiles = { Default: old["p_" + host] };
+      await chrome.storage.sync.set({ [key]: profiles });
+      await chrome.storage.sync.remove("p_" + host);
+    }
+  }
+  return profiles || {};
+}
+
 async function saveProfile() {
   const host = getHostname(currentUrl);
+  const key = getProfileKey(host);
+  const name = document.getElementById("profileName").value.trim() || "Default";
+  const profiles = await getAllProfiles();
   const p = {};
   fields.forEach(f => { p["i" + f.index] = f.fillValue || ""; });
-  await chrome.storage.sync.set({ ["p_" + host]: p });
-  showStatus("Saved");
+  profiles[name] = p;
+  await chrome.storage.sync.set({ [key]: profiles });
+  populateProfileSelect(profiles, name);
+  showStatus("Saved \"" + name + "\"");
+}
+
+async function loadProfile(name) {
+  const host = getHostname(currentUrl);
+  const key = getProfileKey(host);
+  const profiles = await getAllProfiles();
+  const p = profiles[name];
+  if (!p) { showStatus("Profile not found", "error"); return; }
+  fields.forEach(f => { const v = p["i" + f.index]; if (v !== undefined) f.fillValue = v; });
+  document.querySelectorAll(".field-value").forEach((el, i) => { if (fields[i]) el.value = fields[i].fillValue || ""; });
+  document.getElementById("profileName").value = name;
+}
+
+async function deleteProfile() {
+  const sel = document.getElementById("profileSelect");
+  const name = sel.value;
+  if (!name) { showStatus("Select a profile to delete", "warning"); return; }
+  const host = getHostname(currentUrl);
+  const key = getProfileKey(host);
+  const profiles = await getAllProfiles();
+  delete profiles[name];
+  await chrome.storage.sync.set({ [key]: profiles });
+  populateProfileSelect(profiles);
+  if (Object.keys(profiles).length === 0) document.getElementById("profileName").value = "Default";
+  showStatus("Deleted \"" + name + "\"");
+}
+
+function populateProfileSelect(profiles, selected) {
+  const sel = document.getElementById("profileSelect");
+  sel.innerHTML = '<option value="">-- Load profile --</option>';
+  Object.keys(profiles).forEach(name => {
+    const opt = document.createElement("option");
+    opt.value = name; opt.textContent = name;
+    if (name === selected) opt.selected = true;
+    sel.appendChild(opt);
+  });
 }
 
 async function autoLoadProfile() {
-  const host = getHostname(currentUrl);
-  const res = await chrome.storage.sync.get(["p_" + host]);
-  const p = res["p_" + host];
+  const profiles = await getAllProfiles();
+  const names = Object.keys(profiles);
+  if (names.length === 0) return;
+  const name = names.includes("Default") ? "Default" : names[0];
+  const p = profiles[name];
   if (!p) return;
   fields.forEach(f => { const v = p["i" + f.index]; if (v !== undefined) f.fillValue = v; });
   document.querySelectorAll(".field-value").forEach((el, i) => { if (fields[i]) el.value = fields[i].fillValue || ""; });
+  document.getElementById("profileName").value = name;
+  populateProfileSelect(profiles, name);
 }
 
-async function loadProfile() { await autoLoadProfile(); showStatus("Loaded"); }
+function exportProfiles() {
+  const key = "profiles_";
+  chrome.storage.sync.get(null, (all) => {
+    const profileData = {};
+    Object.keys(all).forEach(k => {
+      if (k.startsWith(key) || k.startsWith("p_")) profileData[k] = all[k];
+    });
+    const blob = new Blob([JSON.stringify(profileData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "quick-fill-profiles.json"; a.click();
+    URL.revokeObjectURL(url);
+    showStatus("Exported!");
+  });
+}
+
+function importProfiles() {
+  document.getElementById("importFileInput").click();
+}
+
+document.getElementById("importFileInput").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (typeof data !== "object") throw new Error("Invalid format");
+      await chrome.storage.sync.set(data);
+      showStatus("Imported!");
+      loadFields();
+    } catch {
+      showStatus("Invalid file", "error");
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = "";
+});
 
 function applyTheme(dark) {
   document.body.dataset.theme = dark ? "dark" : "light";
@@ -340,7 +507,14 @@ document.getElementById("clearAllBtn").addEventListener("click", clearAll);
 document.getElementById("fillSubmitBtn").addEventListener("click", fillAndSubmit);
 document.getElementById("autoSubmitBtn").addEventListener("click", autoFillAndSubmit);
 document.getElementById("saveProfileBtn").addEventListener("click", saveProfile);
-document.getElementById("loadProfileBtn").addEventListener("click", loadProfile);
+document.getElementById("loadProfileBtn").addEventListener("click", () => {
+  const name = document.getElementById("profileSelect").value;
+  if (name) loadProfile(name);
+  else showStatus("Select a profile", "warning");
+});
+document.getElementById("deleteProfileBtn").addEventListener("click", deleteProfile);
+document.getElementById("exportProfilesBtn").addEventListener("click", exportProfiles);
+document.getElementById("importProfilesBtn").addEventListener("click", importProfiles);
 document.getElementById("reloadExtBtn").addEventListener("click", () => chrome.runtime.reload());
 document.getElementById("openRepoBtn").addEventListener("click", () => {
   chrome.tabs.create({ url: "https://github.com/Drakuu/Auto-Fill" });

@@ -50,37 +50,37 @@ try {
   });
 
   chrome.runtime.onMessage.addListener((msg, sender) => {
-  if (msg.action === "autoFill" || msg.action === "checkAutoFill") {
-    const tabId = sender.tab?.id || msg.tabId;
-    const domain = msg.domain;
-    if (!tabId || !domain) return;
+    if (msg.action === "autoFill" || msg.action === "checkAutoFill") {
+      const tabId = sender.tab?.id || msg.tabId;
+      const domain = msg.domain;
+      if (!tabId || !domain) return;
 
-    chrome.storage.sync.get(["autoFillDomains", "profiles_" + domain, "p_" + domain], (res) => {
-      // Only proceed if auto-fill is enabled for this domain
-      const domains = res.autoFillDomains || {};
-      if (msg.action === "checkAutoFill" && !domains[domain]) return;
+      chrome.storage.sync.get(["autoFillDomains", "profiles_" + domain, "p_" + domain], (res) => {
+        const domains = res.autoFillDomains || {};
+        if (msg.action === "checkAutoFill" && !domains[domain]) return;
 
-      let profiles = res["profiles_" + domain];
-      if (!profiles && res["p_" + domain]) {
-        profiles = { Default: res["p_" + domain] };
-      }
-      const profile = profiles?.Default || Object.values(profiles || {})[0];
-      if (!profile) return;
+        let profiles = res["profiles_" + domain];
+        if (!profiles && res["p_" + domain]) {
+          profiles = { Default: res["p_" + domain] };
+        }
+        const profile = profiles?.Default || Object.values(profiles || {})[0];
+        if (!profile) return;
 
-      const data = Object.entries(profile).map(([key, value]) => {
-        const idx = parseInt(key.replace("i", ""), 10);
-        return { index: idx, value, selector: "" };
+        const data = Object.entries(profile).map(([key, value]) => {
+          const idx = parseInt(key.replace("i", ""), 10);
+          return { index: idx, value, selector: "" };
+        });
+
+        chrome.scripting.executeScript({
+          target: { tabId },
+          func: autoFillFields,
+          args: [data],
+          world: "MAIN"
+        });
       });
+    }
+  });
 
-      chrome.scripting.executeScript({
-        target: { tabId },
-        func: autoFillFields,
-        args: [data],
-        world: "MAIN"
-      });
-    });
-  }
-});
 } catch (e) {
   console.error("Quick Fill background init error:", e);
 }
@@ -91,18 +91,54 @@ function autoFillFields(data) {
   (data || []).forEach(function(item) {
     try {
       var field = null;
-      if (item.selector) try { field = document.querySelector(item.selector); } catch(e) {}
+      if (item.shadowHost) {
+        var host = document.querySelector(item.shadowHost);
+        if (host && host.shadowRoot) {
+          if (item.selector) try { field = host.shadowRoot.querySelector(item.selector); } catch(e) {}
+          if (!field) {
+            var s = host.shadowRoot.querySelectorAll('input:not([type=submit]):not([type=button]):not([type=reset]):not([type=hidden]):not([type=file]):not([type=image]), textarea, select');
+            field = s[item.index];
+          }
+        }
+      } else if (item.iframeIndex !== undefined) {
+        var iframes = document.querySelectorAll('iframe');
+        var iframe = iframes[item.iframeIndex];
+        if (iframe && iframe.contentDocument) {
+          if (item.selector) try { field = iframe.contentDocument.querySelector(item.selector); } catch(e) {}
+          if (!field) {
+            var s2 = iframe.contentDocument.querySelectorAll('input:not([type=submit]):not([type=button]):not([type=reset]):not([type=hidden]):not([type=file]):not([type=image]), textarea, select');
+            field = s2[item.index];
+          }
+        }
+      }
       if (!field) {
-        var all = document.querySelectorAll('input:not([type=submit]):not([type=button]):not([type=reset]):not([type=hidden]):not([type=file]):not([type=image]), textarea, select');
-        field = all[item.index];
+        if (item.selector) try { field = document.querySelector(item.selector); } catch(e) {}
+        if (!field) {
+          var all = document.querySelectorAll('input:not([type=submit]):not([type=button]):not([type=reset]):not([type=hidden]):not([type=file]):not([type=image]), textarea, select');
+          field = all[item.index];
+        }
       }
       if (!field) return;
-      if (field.tagName.toLowerCase() === 'select') {
+      var tag = field.tagName.toLowerCase();
+      var type = (field.type || '').toLowerCase();
+      if (tag === 'select') {
         var match = Array.from(field.options).some(function(o) { return o.value === item.value; });
-        if (match) field.value = item.value;
+        if (match) {
+          field.value = item.value;
+          field.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      } else if (type === 'checkbox') {
+        field.checked = item.value === 'on' || item.value === 'true' || (item.value && item.value !== 'off' && item.value !== 'false');
+        field.dispatchEvent(new Event('click', { bubbles: true }));
+        field.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+        field.dispatchEvent(new Event('change', { bubbles: true }));
+      } else if (type === 'radio') {
+        field.checked = true;
+        field.dispatchEvent(new Event('click', { bubbles: true }));
+        field.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
         field.dispatchEvent(new Event('change', { bubbles: true }));
       } else {
-        if (ns) ns.call(field, field.type === 'number' ? Number(item.value) : item.value);
+        if (ns) ns.call(field, type === 'number' ? Number(item.value) : item.value);
         field.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
       }
     } catch(e) {}

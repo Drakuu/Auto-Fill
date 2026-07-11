@@ -56,18 +56,54 @@ function mainWorldFill(data) {
   (data || []).forEach(function(item) {
     try {
       var field = null;
-      if (item.selector) try { field = document.querySelector(item.selector); } catch(e) {}
+      if (item.shadowHost) {
+        var host = document.querySelector(item.shadowHost);
+        if (host && host.shadowRoot) {
+          if (item.selector) try { field = host.shadowRoot.querySelector(item.selector); } catch(e) {}
+          if (!field) {
+            var s = host.shadowRoot.querySelectorAll('input:not([type=submit]):not([type=button]):not([type=reset]):not([type=hidden]):not([type=file]):not([type=image]), textarea, select');
+            field = s[item.index];
+          }
+        }
+      } else if (item.iframeIndex !== undefined) {
+        var iframes = document.querySelectorAll('iframe');
+        var iframe = iframes[item.iframeIndex];
+        if (iframe && iframe.contentDocument) {
+          if (item.selector) try { field = iframe.contentDocument.querySelector(item.selector); } catch(e) {}
+          if (!field) {
+            var s2 = iframe.contentDocument.querySelectorAll('input:not([type=submit]):not([type=button]):not([type=reset]):not([type=hidden]):not([type=file]):not([type=image]), textarea, select');
+            field = s2[item.index];
+          }
+        }
+      }
       if (!field) {
-        var all = document.querySelectorAll('input:not([type=submit]):not([type=button]):not([type=reset]):not([type=hidden]):not([type=file]):not([type=image]), textarea, select');
-        field = all[item.index];
+        if (item.selector) try { field = document.querySelector(item.selector); } catch(e) {}
+        if (!field) {
+          var all = document.querySelectorAll('input:not([type=submit]):not([type=button]):not([type=reset]):not([type=hidden]):not([type=file]):not([type=image]), textarea, select');
+          field = all[item.index];
+        }
       }
       if (!field) return;
-      if (field.tagName.toLowerCase() === 'select') {
+      var tag = field.tagName.toLowerCase();
+      var type = (field.type || '').toLowerCase();
+      if (tag === 'select') {
         var match = Array.from(field.options).some(function(o) { return o.value === item.value; });
-        if (match) field.value = item.value;
+        if (match) {
+          field.value = item.value;
+          field.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      } else if (type === 'checkbox') {
+        field.checked = item.value === 'on' || item.value === 'true' || (item.value && item.value !== 'off' && item.value !== 'false');
+        field.dispatchEvent(new Event('click', { bubbles: true }));
+        field.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+        field.dispatchEvent(new Event('change', { bubbles: true }));
+      } else if (type === 'radio') {
+        field.checked = true;
+        field.dispatchEvent(new Event('click', { bubbles: true }));
+        field.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
         field.dispatchEvent(new Event('change', { bubbles: true }));
       } else {
-        if (ns) ns.call(field, field.type === 'number' ? Number(item.value) : item.value);
+        if (ns) ns.call(field, type === 'number' ? Number(item.value) : item.value);
         field.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
       }
     } catch(e) {}
@@ -204,11 +240,6 @@ function renderAll() {
         body.appendChild(card);
       });
     });
-    document.getElementById("fillAllBtn").disabled = false;
-    document.getElementById("clearAllBtn").disabled = false;
-  } else {
-    document.getElementById("fillAllBtn").disabled = true;
-    document.getElementById("clearAllBtn").disabled = true;
   }
 
   if (currentTab === "buttons" && hasButtons) {
@@ -227,12 +258,13 @@ function renderAll() {
       card.appendChild(label); card.appendChild(info); card.appendChild(row);
       c.appendChild(card);
     });
-    document.getElementById("fillSubmitBtn").disabled = false;
-    document.getElementById("autoSubmitBtn").disabled = false;
-  } else {
-    document.getElementById("fillSubmitBtn").disabled = true;
-    document.getElementById("autoSubmitBtn").disabled = true;
   }
+
+  // Enable/disable buttons based on available content, NOT current tab
+  document.getElementById("fillAllBtn").disabled = !hasFields;
+  document.getElementById("clearAllBtn").disabled = !hasFields;
+  document.getElementById("fillSubmitBtn").disabled = !hasFields || !hasButtons;
+  document.getElementById("autoSubmitBtn").disabled = !hasFields || !hasButtons;
 }
 
 function switchTab(tab) {
@@ -245,17 +277,53 @@ function randFrom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
 const words = ["alpha","beta","gamma","delta","epsilon","zeta","eta","theta","iota","kappa","lambda","mu","nu","xi","omicron","pi","rho","sigma","tau","upsilon","phi","chi","psi","omega","test","demo","sample","hello","world","foo","bar","baz","quick","brown","fox","jump","lazy","dog","red","blue","green","yellow","black","white","silver","gold","task","item","note","data","value","user","name","email","pass","key","id","new","edit","view","list","add","create","update","delete","save","cancel","submit","reset","form","page","file","text","number","phone","date","time","url","search","yes","no","on","off","true","false","one","two","three","four","five","admin","manager","moderator","editor","author","contributor","member","guest"];
 const emails = ["@gmail.com","@yahoo.com","@outlook.com","@hotmail.com","@icloud.com","@proton.me","@pm.me","@example.com","@test.com"];
+const countries = ["United States","Canada","United Kingdom","Australia","Germany","France","Japan","Brazil","India","Mexico","Italy","Spain","Netherlands","Sweden","South Korea","Singapore","New Zealand","Switzerland","Norway","Denmark"];
+const cities = ["New York","Los Angeles","Chicago","Houston","Phoenix","London","Manchester","Toronto","Vancouver","Montreal","Sydney","Melbourne","Berlin","Munich","Paris","Lyon","Tokyo","Osaka","Mumbai","Delhi","Sao Paulo","Rio","Milan","Rome","Madrid","Barcelona","Amsterdam","Stockholm","Seoul","Singapore","Zurich","Oslo","Copenhagen"];
+const states = ["California","Texas","Florida","New York","Illinois","Pennsylvania","Ohio","Georgia","North Carolina","Michigan","New Jersey","Virginia","Washington","Arizona","Massachusetts","Tennessee","Indiana","Missouri","Maryland","Wisconsin","Colorado","Minnesota","Alabama","South Carolina","Louisiana","Kentucky","Oregon","Oklahoma","Connecticut","Nevada"];
+const streets = ["Main St","Oak Ave","Elm St","Park Rd","Broadway","High St","Maple Dr","Cedar Ln","Lake View","Sunset Blvd","River Rd","Hill St","Pine Ave","Forest Dr","Meadow Ln"];
+
+function getLabelText(field) {
+  return ((field.label || "") + " " + (field.name || "") + " " + (field.id || "") + " " + (field.placeholder || "")).toLowerCase();
+}
 
 function generateRandomValue(field) {
   if (field.options && field.options.length > 0) return randFrom(field.options);
+
+  const label = getLabelText(field);
   const t = field.type || "text";
+
+  // Label-based detection (country, city, state, zip, address, etc.)
+  if (/country|nation/i.test(label)) return randFrom(countries);
+  if (/city|town/i.test(label)) return randFrom(cities);
+  if (/state|province|region/i.test(label)) return randFrom(states);
+  if (/zip|postal|postcode|pincode/i.test(label)) return String(Math.floor(Math.random() * 90000) + 10000);
+  if (/address|street|addr/i.test(label)) return Math.floor(Math.random() * 9999) + 1 + " " + randFrom(streets);
+  if (/birth|dob|born/i.test(label)) return "1990-" + String(Math.floor(Math.random() * 12) + 1).padStart(2,"0") + "-" + String(Math.floor(Math.random() * 28) + 1).padStart(2,"0");
+  if (/gender|sex/i.test(label)) return randFrom(["Male","Female","Other","Prefer not to say"]);
+  if (/company|organization|org|employer|firm/i.test(label)) return randFrom(["Acme Corp","Globex Inc","Initech","Umbrella Corp","Stark Industries","Wayne Enterprises","Cyberdyne","Hooli","Dunder Mifflin","Sterling Cooper"]);
+
+  // Type-based detection
   if (t === "email") return randFrom(words) + "." + randFrom(words) + Math.floor(Math.random() * 999) + randFrom(emails);
-  if (t === "number") return String(Math.floor(Math.random() * 9999) + 1);
+  if (t === "number" || t === "range") return String(Math.floor(Math.random() * 9999) + 1);
   if (t === "tel" || t === "phone") return "555-" + String(Math.floor(Math.random() * 900) + 100) + "-" + String(Math.floor(Math.random() * 9000) + 1000);
   if (t === "url") return "https://example.com/" + randFrom(words);
   if (t === "password") return randFrom(words) + randFrom(words) + Math.floor(Math.random() * 999);
   if (t === "date") return "2026-" + String(Math.floor(Math.random() * 12) + 1).padStart(2,"0") + "-" + String(Math.floor(Math.random() * 28) + 1).padStart(2,"0");
+  if (t === "time") return String(Math.floor(Math.random() * 12) + 8).padStart(2,"0") + ":" + String(Math.floor(Math.random() * 4) * 15).padStart(2,"0");
+  if (t === "datetime-local") return "2026-" + String(Math.floor(Math.random() * 12) + 1).padStart(2,"0") + "-" + String(Math.floor(Math.random() * 28) + 1).padStart(2,"0") + "T" + String(Math.floor(Math.random() * 12) + 8).padStart(2,"0") + ":00";
+  if (t === "month") return "2026-" + String(Math.floor(Math.random() * 12) + 1).padStart(2,"0");
+  if (t === "week") return "2026-W" + String(Math.floor(Math.random() * 52) + 1).padStart(2,"0");
+  if (t === "color") return "#" + Math.floor(Math.random() * 16777215).toString(16).padStart(6,"0");
   if (t === "textarea" || field.tag === "textarea") return "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.";
+  if (t === "checkbox") return "on";
+  if (t === "radio") return randFrom(field.options || ["Yes", "No"]);
+
+  // Search field
+  if (/search/i.test(label)) return "";
+  // Name field
+  if (/first.?name|fname|given/i.test(label)) return randFrom(["John","Jane","Alex","Sarah","Michael","Emma","David","Sophia","James","Olivia","Robert","Ava","William","Mia","Daniel","Isabella","Thomas","Charlotte","Christopher","Amelia"]);
+  if (/last.?name|lname|family|surname/i.test(label)) return randFrom(["Smith","Johnson","Williams","Brown","Jones","Garcia","Miller","Davis","Rodriguez","Martinez","Wilson","Anderson","Taylor","Thomas","Moore","Jackson","Martin","Lee","White","Harris"]);
+
   return randFrom(words) + " " + randFrom(words) + " " + randFrom(words);
 }
 
@@ -272,9 +340,7 @@ function autoGenerateValues() {
 
 async function autoFillAndSubmit() {
   autoGenerateValues();
-  const data = fields.map(f => ({ selector: f.selector, index: f.index, value: f.fillValue || "" }));
-  const res = await execInMainWorld("fill", data);
-  if (res?.success) fields.forEach((_, i) => markFilled(i));
+  const count = await fillWithSequencing();
   const btn = buttons.find(b => b.type === "submit" || /submit|save|send|add/i.test(b.label)) || buttons[0];
   if (btn) {
     await execInMainWorld("click", { selector: btn.selector, index: btn.index });
@@ -304,11 +370,83 @@ function markFilled(idx) {
   badge.textContent = "✓";
 }
 
+function matchSelectValue(value, options, optionTexts) {
+  if (!options || !options.length) return value;
+  if (options.includes(value)) return value;
+  var lower = (value || "").toLowerCase();
+  for (var i = 0; i < (optionTexts || []).length; i++) {
+    if (optionTexts[i].toLowerCase() === lower) return options[i];
+    if (optionTexts[i].toLowerCase().includes(lower)) return options[i];
+  }
+  for (var j = 0; j < options.length; j++) {
+    if (lower.includes(options[j].toLowerCase())) return options[j];
+  }
+  return options[0] || value;
+}
+
+async function rematchRemainingSelects(selectData, startIdx) {
+  try {
+    var tabId = (await chrome.tabs.query({ active: true, currentWindow: true }))[0]?.id;
+    if (!tabId) return;
+    var indices = [];
+    for (var i = startIdx; i < selectData.length; i++) indices.push(selectData[i].index);
+    var r = await chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      func: function(idxs) {
+        var all = document.querySelectorAll('input:not([type=submit]):not([type=button]):not([type=reset]):not([type=hidden]):not([type=file]):not([type=image]), textarea, select');
+        return idxs.map(function(idx) {
+          var el = all[idx];
+          if (!el || el.tagName.toLowerCase() !== 'select') return null;
+          return {
+            opts: Array.from(el.options).map(function(o) { return o.value; }).filter(function(v) { return v; }),
+            texts: Array.from(el.options).map(function(o) { return o.text; })
+          };
+        });
+      },
+      args: [indices],
+      world: "MAIN"
+    });
+    var results = r?.[0]?.result || [];
+    for (var j = 0; j < results.length; j++) {
+      if (results[j] && results[j].opts && results[j].opts.length) {
+        var matched = matchSelectValue(selectData[startIdx + j].value, results[j].opts, results[j].texts);
+        if (matched !== selectData[startIdx + j].value) selectData[startIdx + j].value = matched;
+      }
+    }
+  } catch(e) {}
+}
+
+async function fillWithSequencing() {
+  var selIdxs = [], normIdxs = [];
+  fields.forEach(function(f, i) {
+    if (f.fillValue === undefined || f.fillValue === null) return;
+    if (f.tag === 'select') selIdxs.push(i);
+    else normIdxs.push(i);
+  });
+  var filled = 0;
+  if (normIdxs.length > 0) {
+    var data = normIdxs.map(function(i) { return { selector: fields[i].selector, index: fields[i].index, value: fields[i].fillValue }; });
+    var res = await execInMainWorld("fill", data);
+    if (res && res.success) { normIdxs.forEach(function(i) { markFilled(i); }); filled += normIdxs.length; }
+  }
+  if (selIdxs.length > 0) {
+    var selData = selIdxs.map(function(i) { return { selector: fields[i].selector, index: fields[i].index, value: fields[i].fillValue, fillIdx: i }; });
+    for (var i = 0; i < selData.length; i++) {
+      var item = selData[i];
+      var res2 = await execInMainWorld("fill", [{ selector: item.selector, index: item.index, value: item.value }]);
+      if (res2 && res2.success) { markFilled(item.fillIdx); filled++; }
+      if (i + 1 < selData.length) {
+        await new Promise(function(r) { setTimeout(r, 500); });
+        await rematchRemainingSelects(selData, i + 1);
+      }
+    }
+  }
+  return filled;
+}
+
 async function fillAll() {
-  const data = fields.map(f => ({ selector: f.selector, index: f.index, value: f.fillValue || "" }));
-  const res = await execInMainWorld("fill", data);
-  if (res?.success) fields.forEach((_, i) => markFilled(i));
-  showStatus(data.length + " field" + (data.length !== 1 ? "s" : "") + " filled");
+  var count = await fillWithSequencing();
+  showStatus(count + " field" + (count !== 1 ? "s" : "") + " filled");
 }
 
 async function clearAll() {
@@ -331,19 +469,14 @@ async function doClick(idx) {
 }
 
 async function doFillClick(idx) {
-  const data = fields.map(f => ({ selector: f.selector, index: f.index, value: f.fillValue || "" }));
-  const res = await execInMainWorld("fill", data);
-  if (res?.success) fields.forEach((_, i) => markFilled(i));
+  const count = await fillWithSequencing();
   const b = buttons[idx];
   await execInMainWorld("click", { selector: b.selector, index: b.index });
   showStatus("Done!");
 }
 
 async function fillAndSubmit() {
-  const data = fields.map(f => ({ selector: f.selector, index: f.index, value: f.fillValue || "" }));
-  const res = await execInMainWorld("fill", data);
-  if (res?.success) fields.forEach((_, i) => markFilled(i));
-
+  const count = await fillWithSequencing();
   const btn = buttons.find(b => b.type === "submit" || /submit|save|send|add/i.test(b.label)) || buttons[0];
   if (btn) {
     await execInMainWorld("click", { selector: btn.selector, index: btn.index });

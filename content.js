@@ -23,7 +23,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
 
     const result = { fields: [], buttons: [] };
-    scanForFields(document, result, topForms, formLabels);
+    scanForFields(document, result, topForms, formLabels, { type: "document" });
     sendResponse({ fields: result.fields, buttons: result.buttons, url: window.location.href });
     return;
   }
@@ -71,8 +71,8 @@ function isPageButton(el) {
   return false;
 }
 
-function scanForFields(root, result, topForms, formLabels) {
-  // Collect fields and buttons in this root
+function scanForFields(root, result, topForms, formLabels, context) {
+  const ctx = context || { type: "document" };
   const all = root.querySelectorAll ? root.querySelectorAll("input, textarea, select, button") : [];
   all.forEach(el => {
     if (isFormField(el)) {
@@ -81,7 +81,7 @@ function scanForFields(root, result, topForms, formLabels) {
       const options = el.tagName.toLowerCase() === "select"
         ? Array.from(el.options).map(o => o.value).filter(v => v)
         : undefined;
-      result.fields.push({
+      const entry = {
         kind: "field", index: result.fields.length,
         tag: el.tagName.toLowerCase(), type: el.type || "text",
         name: el.name || "", id: el.id || "",
@@ -91,7 +91,15 @@ function scanForFields(root, result, topForms, formLabels) {
         options,
         formIndex: formIdx,
         formLabel: formIdx >= 0 ? formLabels[formIdx] : null
-      });
+      };
+      if (ctx.type === "shadow") entry.shadowHost = getUniqueSelector(ctx.host);
+      if (ctx.type === "iframe") {
+        const allIframes = document.querySelectorAll("iframe");
+        for (let i = 0; i < allIframes.length; i++) {
+          if (allIframes[i] === ctx.iframeEl) { entry.iframeIndex = i; break; }
+        }
+      }
+      result.fields.push(entry);
     }
     if (isPageButton(el)) {
       const parentForm = el.closest("form");
@@ -99,26 +107,32 @@ function scanForFields(root, result, topForms, formLabels) {
       let label = el.tagName === "BUTTON"
         ? el.textContent.trim() || el.getAttribute("aria-label") || el.name || el.id || "button"
         : el.value || el.name || el.id || "submit";
-      result.buttons.push({
+      const entry = {
         kind: "button", index: result.buttons.length,
         tag: el.tagName.toLowerCase(), type: el.type || "",
         label, id: el.id || "",
         selector: getUniqueSelector(el), formIndex: formIdx
-      });
+      };
+      if (ctx.type === "shadow") entry.shadowHost = getUniqueSelector(ctx.host);
+      if (ctx.type === "iframe") {
+        const allIframes = document.querySelectorAll("iframe");
+        for (let i = 0; i < allIframes.length; i++) {
+          if (allIframes[i] === ctx.iframeEl) { entry.iframeIndex = i; break; }
+        }
+      }
+      result.buttons.push(entry);
     }
   });
 
-  // Recurse into shadow roots
   const allElements = root.querySelectorAll ? root.querySelectorAll("*") : [];
   allElements.forEach(el => {
-    if (el.shadowRoot) scanForFields(el.shadowRoot, result, topForms, formLabels);
+    if (el.shadowRoot) scanForFields(el.shadowRoot, result, topForms, formLabels, { type: "shadow", host: el });
   });
 
-  // Recurse into same-origin iframes (only from document)
   if (root === document) {
     root.querySelectorAll("iframe").forEach(iframe => {
       try {
-        if (iframe.contentDocument) scanForFields(iframe.contentDocument, result, topForms, formLabels);
+        if (iframe.contentDocument) scanForFields(iframe.contentDocument, result, topForms, formLabels, { type: "iframe", iframeEl: iframe });
       } catch (e) {}
     });
   }

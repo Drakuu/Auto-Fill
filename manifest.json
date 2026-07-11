@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Quick Fill",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "See all form fields on a page and fill them instantly.",
   "action": {
     "default_popup": "popup.html",

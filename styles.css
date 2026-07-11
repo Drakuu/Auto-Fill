@@ -582,6 +582,40 @@ h1 {
   border-color: var(--red);
 }
 
+.options-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  gap: 8px;
+}
+
+.opt-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.opt-select {
+  padding: 3px 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 10px;
+  font-family: inherit;
+  background: var(--bg-input);
+  color: var(--text);
+  cursor: pointer;
+  outline: none;
+}
+
+.opt-label input[type="checkbox"] {
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
 .status {
   margin-top: 6px;
   font-size: 11px;

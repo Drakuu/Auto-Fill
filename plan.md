@@ -31,16 +31,16 @@
 - [x] Import profiles from JSON file
 - [x] Delete profile button
 
-## P2 — Features: Better form detection
-- [ ] Shadow DOM field recursion
-- [ ] Handle iframe forms (if same origin)
+## P2 — Features: Better form detection ✓
+- [x] Shadow DOM field recursion
+- [x] Handle iframe forms (if same origin)
 - [x] Detect and show form groups (`<form>` boundaries)
 
-## P2 — Features: Fill improvements
-- [ ] Multiple submit strategies (click / form.submit / dispatch submit event)
-- [ ] Progress indicator: "3/5 filled" instead of just "All filled"
-- [ ] Handle `input[type="number"]` React wart (number vs string value)
-- [ ] Pre-fill on page load for whitelisted domains
+## P2 — Features: Fill improvements ✓
+- [x] Multiple submit strategies (click / form.submit / dispatch submit event)
+- [x] Progress indicator: "X fields filled" instead of just "All filled"
+- [x] Handle `input[type="number"]` React wart (number vs string value)
+- [x] Auto-fill on page load for whitelisted domains (via background.js + content.js init)
 
 ## P3 — Quality of life
 - [ ] Keyboard shortcut `Ctrl+Shift+F` to open popup (manifest `"commands"`)

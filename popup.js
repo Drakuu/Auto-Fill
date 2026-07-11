@@ -36,10 +36,11 @@ async function execInMainWorld(type, payload) {
         world: "MAIN"
       });
     } else if (type === "click") {
+      const strategy = payload.strategy || document.getElementById("submitStrategy")?.value || "auto";
       await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         func: mainWorldClick,
-        args: [payload.selector, payload.index],
+        args: [payload.selector, payload.index, strategy],
         world: "MAIN"
       });
     }
@@ -66,14 +67,15 @@ function mainWorldFill(data) {
         if (match) field.value = item.value;
         field.dispatchEvent(new Event('change', { bubbles: true }));
       } else {
-        if (ns) ns.call(field, item.value);
+        if (ns) ns.call(field, field.type === 'number' ? Number(item.value) : item.value);
         field.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
       }
     } catch(e) {}
   });
 }
 
-function mainWorldClick(selector, index) {
+function mainWorldClick(selector, index, strategy) {
+  strategy = strategy || 'auto';
   try {
     var btn = null;
     if (selector) try { btn = document.querySelector(selector); } catch(e) {}
@@ -82,10 +84,17 @@ function mainWorldClick(selector, index) {
       btn = all[index];
     }
     if (!btn) return;
-    btn.click();
-    btn.dispatchEvent(new Event('click', { bubbles: true }));
-    var form = btn.closest('form');
-    if (form) form.dispatchEvent(new Event('submit', { bubbles: true }));
+
+    if (strategy === 'click' || strategy === 'auto') {
+      btn.click();
+    }
+    if (strategy === 'dispatch' || strategy === 'auto') {
+      btn.dispatchEvent(new Event('click', { bubbles: true }));
+    }
+    if (strategy === 'submit' || (strategy === 'auto' && btn.type === 'submit')) {
+      var form = btn.closest('form');
+      if (form) form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    }
   } catch(e) {}
 }
 
@@ -299,7 +308,7 @@ async function fillAll() {
   const data = fields.map(f => ({ selector: f.selector, index: f.index, value: f.fillValue || "" }));
   const res = await execInMainWorld("fill", data);
   if (res?.success) fields.forEach((_, i) => markFilled(i));
-  showStatus("All filled");
+  showStatus(data.length + " field" + (data.length !== 1 ? "s" : "") + " filled");
 }
 
 async function clearAll() {
@@ -477,6 +486,16 @@ document.getElementById("themeToggle").addEventListener("click", () => {
   applyTheme(document.body.dataset.theme !== "dark");
 });
 
+document.getElementById("autoFillToggle").addEventListener("change", async (e) => {
+  const host = getHostname(currentUrl);
+  const res = await chrome.storage.sync.get(["autoFillDomains"]);
+  const domains = res.autoFillDomains || {};
+  if (e.target.checked) domains[host] = true;
+  else delete domains[host];
+  await chrome.storage.sync.set({ autoFillDomains: domains });
+  showStatus(e.target.checked ? "Auto-fill enabled" : "Auto-fill disabled");
+});
+
 function showVersion() {
   const m = chrome.runtime.getManifest();
   document.getElementById("versionDisplay").textContent = "v" + m.version;
@@ -515,10 +534,28 @@ document.getElementById("loadProfileBtn").addEventListener("click", () => {
 document.getElementById("deleteProfileBtn").addEventListener("click", deleteProfile);
 document.getElementById("exportProfilesBtn").addEventListener("click", exportProfiles);
 document.getElementById("importProfilesBtn").addEventListener("click", importProfiles);
-document.getElementById("reloadExtBtn").addEventListener("click", () => chrome.runtime.reload());
+document.getElementById("reloadExtBtn").addEventListener("click", () => {
+  showStatus("Reloading...");
+  setTimeout(() => chrome.runtime.reload(), 300);
+});
 document.getElementById("openRepoBtn").addEventListener("click", () => {
   chrome.tabs.create({ url: "https://github.com/Drakuu/Auto-Fill" });
 });
+async function loadAutoFillState() {
+  const host = getHostname(currentUrl);
+  if (!host || host === "unknown") return;
+  const res = await chrome.storage.sync.get(["autoFillDomains"]);
+  const domains = res.autoFillDomains || {};
+  document.getElementById("autoFillToggle").checked = !!domains[host];
+}
+
+// Patch autoLoadProfile to also update auto-fill toggle
+const origAutoLoad = autoLoadProfile;
+autoLoadProfile = async function() {
+  await origAutoLoad();
+  loadAutoFillState();
+};
+
 document.addEventListener("DOMContentLoaded", () => {
   chrome.storage.sync.get(["theme"], (res) => {
     if (res.theme === "dark") applyTheme(true);

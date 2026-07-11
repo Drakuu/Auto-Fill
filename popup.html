@@ -52,6 +52,20 @@
       <button id="autoSubmitBtn" class="auto-btn" disabled>Auto Fill & Submit</button>
       <button id="clearAllBtn" disabled>Clear</button>
     </div>
+    <div class="options-row">
+      <label class="opt-label">
+        Submit:
+        <select id="submitStrategy" class="opt-select">
+          <option value="auto">Auto</option>
+          <option value="click">Click</option>
+          <option value="submit">form.submit()</option>
+          <option value="dispatch">Dispatch event</option>
+        </select>
+      </label>
+      <label class="opt-label">
+        <input type="checkbox" id="autoFillToggle"> Auto-fill on load
+      </label>
+    </div>
 
     <div class="profile-section">
       <div class="profile-row">

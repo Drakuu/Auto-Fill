@@ -57,8 +57,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "getFormFields") {
+    const topForms = document.querySelectorAll("form");
+    const formLabels = [];
+    topForms.forEach((f, i) => {
+      formLabels.push(f.id || f.name || f.getAttribute("aria-label") || f.action?.replace(/^https?:\/\/[^/]+/, "") || "Form " + (i + 1));
+    });
+
     const fields = [];
     document.querySelectorAll("input:not([type=submit]):not([type=button]):not([type=reset]):not([type=hidden]):not([type=file]):not([type=image]), textarea, select").forEach((el, i) => {
+      const parentForm = el.closest("form");
+      const formIdx = parentForm ? Array.from(topForms).indexOf(parentForm) : -1;
       const options = el.tagName.toLowerCase() === "select"
         ? Array.from(el.options).map(o => o.value).filter(v => v)
         : undefined;
@@ -69,17 +77,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         placeholder: el.placeholder || "", label: getLabel(el),
         currentValue: el.value, required: el.required || false,
         selector: getUniqueSelector(el),
-        options
+        options,
+        formIndex: formIdx,
+        formLabel: formIdx >= 0 ? formLabels[formIdx] : null
       });
     });
     const buttons = [];
     document.querySelectorAll("button, input[type=submit], input[type=button], input[type=reset]").forEach((el, i) => {
+      const parentForm = el.closest("form");
+      const formIdx = parentForm ? Array.from(topForms).indexOf(parentForm) : -1;
       let label = el.tagName === "BUTTON"
         ? el.textContent.trim() || el.getAttribute("aria-label") || el.name || el.id || "button"
         : el.value || el.name || el.id || "submit";
-      buttons.push({ kind: "button", index: i, tag: el.tagName.toLowerCase(), type: el.type || "", label, id: el.id || "", selector: getUniqueSelector(el) });
+      buttons.push({ kind: "button", index: i, tag: el.tagName.toLowerCase(), type: el.type || "", label, id: el.id || "", selector: getUniqueSelector(el), formIndex: formIdx });
     });
-    console.log("Quick Fill: found", fields.length, "fields,", buttons.length, "buttons");
     sendResponse({ fields, buttons, url: window.location.href });
     return;
   }

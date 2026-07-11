@@ -1,5 +1,5 @@
 const VERSION_URL = "https://raw.githubusercontent.com/Drakuu/Auto-Fill/main/version.json";
-const CHECK_INTERVAL = 60 * 60 * 1000; // every hour
+const CHECK_INTERVAL = 2 * 60 * 1000; // every 2 minutes (for testing)
 
 async function checkUpdate() {
   try {

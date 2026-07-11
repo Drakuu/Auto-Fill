@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Quick Fill</h1>
+      <button id="refreshBtn" class="icon-btn" title="Refresh fields">↻</button>
+    </div>
+    <p class="subtitle" id="currentPage">Scanning page...</p>
+
+    <div id="fieldList"></div>
+
+    <div class="footer-actions">
+      <button id="fillAllBtn" class="primary" disabled>Fill All</button>
+      <button id="fillSubmitBtn" class="submit-btn" disabled>Fill & Submit</button>
+      <button id="autoSubmitBtn" class="auto-btn" disabled>Auto Fill & Submit</button>
+      <button id="clearAllBtn" disabled>Clear</button>
+    </div>
+
+    <div class="profile-actions">
+      <button id="saveProfileBtn">Save Profile</button>
+      <button id="loadProfileBtn">Load Profile</button>
+    </div>
+
+    <div id="status" class="status"></div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

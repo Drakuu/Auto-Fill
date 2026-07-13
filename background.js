@@ -1,5 +1,4 @@
 const VERSION_URL = "https://raw.githubusercontent.com/Drakuu/Auto-Fill/main/version.json";
-const CHECK_INTERVAL = 2 * 60 * 1000;
 
 async function checkUpdate() {
   try {
@@ -8,32 +7,27 @@ async function checkUpdate() {
     const remote = data.version;
     const local = chrome.runtime.getManifest().version;
 
-    let needsReload = false;
+    // Check if watcher just pulled (lastPull written within last 6 min)
     try {
       const localRes = await fetch(chrome.runtime.getURL("version.json") + "?t=" + Date.now());
       const localData = await localRes.json();
       if (localData.lastPull) {
-        const lastPull = parseInt(localData.lastPull) * 1000;
-        const age = Date.now() - lastPull;
-        if (age < CHECK_INTERVAL + 30000 && localData.version === remote) {
-          needsReload = true;
+        const age = Date.now() - parseInt(localData.lastPull) * 1000;
+        if (age < 360000 && localData.version === remote && remote !== local) {
+          chrome.action.setBadgeText({ text: "" });
+          chrome.storage.local.set({ updateAvailable: null });
+          chrome.runtime.reload();
+          return;
         }
       }
     } catch {}
 
-    if (needsReload) {
-      chrome.action.setBadgeText({ text: "" });
-      chrome.storage.local.set({ updateAvailable: null });
-      chrome.runtime.reload();
-      return;
-    }
-
     if (remote !== local) {
-      chrome.storage.local.set({ updateAvailable: remote, updateLocal: local });
+      chrome.storage.local.set({ updateAvailable: remote, updateLocal: local, lastCheck: Date.now() });
       chrome.action.setBadgeText({ text: "NEW" });
       chrome.action.setBadgeBackgroundColor({ color: "#e36414" });
     } else {
-      chrome.storage.local.set({ updateAvailable: null });
+      chrome.storage.local.set({ updateAvailable: null, lastCheck: Date.now() });
       chrome.action.setBadgeText({ text: "" });
     }
   } catch {}
@@ -42,14 +36,21 @@ async function checkUpdate() {
 try {
   chrome.runtime.onInstalled.addListener(() => {
     checkUpdate();
-    chrome.alarms.create("checkUpdate", { periodInMinutes: 2 });
+    chrome.alarms.create("checkUpdate", { periodInMinutes: 5 });
   });
 
   chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === "checkUpdate") checkUpdate();
   });
 
-  chrome.runtime.onMessage.addListener((msg, sender) => {
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg.action === "checkUpdateNow") { checkUpdate(); if (sendResponse) sendResponse({ ok: true }); return; }
+    if (msg.action === "getUpdateStatus") {
+      chrome.storage.local.get(["updateAvailable", "updateLocal"], (r) => {
+        sendResponse({ available: r.updateAvailable, current: chrome.runtime.getManifest().version });
+      });
+      return true;
+    }
     if (msg.action === "autoFill" || msg.action === "checkAutoFill") {
       const tabId = sender.tab?.id || msg.tabId;
       const domain = msg.domain;

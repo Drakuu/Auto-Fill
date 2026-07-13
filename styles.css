@@ -695,3 +695,10 @@ h1 {
 .update-btn:hover {
   filter: brightness(0.9);
 }
+
+.update-hint {
+  font-size: 10px;
+  opacity: 0.6;
+  font-weight: 400;
+  font-family: monospace;
+}

@@ -900,9 +900,31 @@ document.getElementById("loadProfileBtn").addEventListener("click", () => {
 document.getElementById("deleteProfileBtn").addEventListener("click", deleteProfile);
 document.getElementById("exportProfilesBtn").addEventListener("click", exportProfiles);
 document.getElementById("importProfilesBtn").addEventListener("click", importProfiles);
+document.getElementById("checkUpdateBtn").addEventListener("click", async () => {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id) {
+      await chrome.tabs.sendMessage(tab.id, { action: "ping" });
+    }
+  } catch {}
+  chrome.runtime.sendMessage({ action: "checkUpdateNow" });
+  showStatus("Checking...");
+  setTimeout(() => {
+    chrome.storage.local.get(["updateAvailable", "lastCheck"], (r) => {
+      if (r.updateAvailable) showStatus("Update v" + r.updateAvailable + " available! Run git pull then Reload.", "warning");
+      else showStatus("Up to date");
+      showVersion();
+    });
+  }, 2000);
+});
 document.getElementById("reloadExtBtn").addEventListener("click", () => {
   showStatus("Reloading...");
-  setTimeout(() => chrome.runtime.reload(), 300);
+  chrome.storage.local.get(["updateAvailable"], (r) => {
+    const ver = r.updateAvailable ? " → v" + r.updateAvailable : "";
+    document.getElementById("status").textContent = "Reloading" + ver + "...";
+    document.getElementById("status").className = "status warning";
+  });
+  setTimeout(() => chrome.runtime.reload(), 500);
 });
 document.getElementById("openRepoBtn").addEventListener("click", () => {
   chrome.tabs.create({ url: "https://github.com/Drakuu/Auto-Fill" });

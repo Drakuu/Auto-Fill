@@ -471,7 +471,7 @@ const labelDetect = (f) => {
   return null;
 };
 
-const detectors = [acDetect, typeStrict, labelDetect, typeLoose];
+const detectors = [acDetect, typeStrict, typeLoose, labelDetect];
 
 const generators = {
   "first":   () => genFirst(),

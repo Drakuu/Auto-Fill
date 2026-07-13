@@ -493,7 +493,7 @@ const generators = {
   "datetime":() => "2026-" + pad(randInt(1, 12), 2) + "-" + pad(randInt(1, 28), 2) + "T" + pad(randInt(8, 19), 2) + ":00",
   "week":    () => "2026-W" + pad(randInt(1, 52), 2),
   "color":   () => "#" + Math.floor(Math.random() * 16777215).toString(16).padStart(6, "0"),
-  "number":  () => String(randInt(1, 9999)),
+  "number":  (f) => String(randInt(Number(f && f.min) || 1, Number(f && f.max) || 9999)),
   "gender":  () => randFrom(["Male", "Female", "Other"]),
   "company": () => genCompany(),
   "job":     () => genJob(),
@@ -501,7 +501,7 @@ const generators = {
   "url":     () => genUrl(),
   "password":() => genPassword(),
   "lorem":   () => genLorem(),
-  "text":    (f) => genWord() + " " + genWord() + (f && f.maxLength > 10 ? " " + genWord() : ""),
+  "text":    () => genWord() + " " + genWord() + " " + genWord(),
   "cnic":    () => pad(randInt(10000, 99999), 5) + "-" + pad(randInt(1000000, 9999999), 7) + "-" + randInt(0, 9),
   "ssn":     () => pad(randInt(100, 999), 3) + "-" + pad(randInt(10, 99), 2) + "-" + pad(randInt(1000, 9999), 4),
   "passport":() => String.fromCharCode(randInt(65, 90)) + String.fromCharCode(randInt(65, 90)) + pad(randInt(1000000, 9999999), 7),
@@ -541,14 +541,27 @@ const generators = {
   "nationality":() => randFrom(["American","Canadian","British","Australian","German","French","Japanese","Brazilian","Indian","Mexican","Italian","Spanish","Dutch","Swedish","South Korean","Chinese","Russian","Swiss"]),
 };
 
+function applyConstraints(val, field) {
+  if (typeof val === 'string') {
+    if (field.maxLength > 0 && val.length > field.maxLength) val = val.substring(0, field.maxLength);
+    if (field.minLength > 0 && val.length < field.minLength) val = val.padEnd(field.minLength, 'x').substring(0, field.maxLength > 0 ? field.maxLength : val.length + field.minLength);
+  }
+  if (field.type === 'number' || field.type === 'range') {
+    var num = Number(val);
+    if (field.min !== '' && num < Number(field.min)) val = String(field.min);
+    if (field.max !== '' && num > Number(field.max)) val = String(field.max);
+    if (field.step !== '') { var st = Number(field.step); if (st > 0) val = String(Math.round(num / st) * st); }
+  }
+  return val;
+}
+
 function generateRandomValue(field) {
-  if (field.options && field.options.length > 0) return randFrom(field.options);
+  if (field.options && field.options.length > 0) return applyConstraints(randFrom(field.options), field);
   for (const detect of detectors) {
     const key = detect(field);
-    if (key && generators[key]) return generators[key](field);
+    if (key && generators[key]) return applyConstraints(generators[key](field), field);
   }
-  const gen = generators["text"];
-  return gen(field);
+  return applyConstraints(generators["text"](field), field);
 }
 
 function autoGenerateValues() {
@@ -648,27 +661,27 @@ async function rematchRemainingSelects(selectData, startIdx) {
 }
 
 async function fillWithSequencing() {
-  var selIdxs = [], normIdxs = [];
+  var allIdxs = [];
   fields.forEach(function(f, i) {
     if (f.fillValue === undefined || f.fillValue === null) return;
-    if (f.tag === 'select' || f.isCustomSelect) selIdxs.push(i);
-    else normIdxs.push(i);
+    allIdxs.push(i);
   });
   var filled = 0;
-  if (normIdxs.length > 0) {
-    var data = normIdxs.map(function(i) { return { selector: fields[i].selector, index: fields[i].index, value: fields[i].fillValue }; });
-    var res = await execInMainWorld("fill", data);
-    if (res && res.success) { normIdxs.forEach(function(i) { markFilled(i); }); filled += normIdxs.length; }
-  }
-  if (selIdxs.length > 0) {
-    var selData = selIdxs.map(function(i) { return { selector: fields[i].selector, index: fields[i].index, value: fields[i].fillValue, isCustomSelect: fields[i].isCustomSelect, hiddenSelectSelector: fields[i].hiddenSelectSelector, fillIdx: i }; });
-    for (var i = 0; i < selData.length; i++) {
-      var item = selData[i];
-      var res2 = await execInMainWorld("fill", [{ selector: item.selector, index: item.index, value: item.value, isCustomSelect: item.isCustomSelect, hiddenSelectSelector: item.hiddenSelectSelector }]);
-      if (res2 && res2.success) { markFilled(item.fillIdx); filled++; }
-      if (i + 1 < selData.length) {
-        await new Promise(function(r) { setTimeout(r, 500); });
-        await rematchRemainingSelects(selData, i + 1);
+  for (var i = 0; i < allIdxs.length; i++) {
+    var fi = allIdxs[i];
+    var f = fields[fi];
+    var item = { selector: f.selector, index: f.index, value: f.fillValue, isCustomSelect: f.isCustomSelect, hiddenSelectSelector: f.hiddenSelectSelector };
+    var res = await execInMainWorld("fill", [item]);
+    if (res && res.success) { markFilled(fi); filled++; }
+    if (i + 1 < allIdxs.length) {
+      var delay = (f.tag === 'select' || f.isCustomSelect) ? 500 : 100;
+      await new Promise(function(r) { setTimeout(r, delay); });
+      if (f.tag === 'select' || f.isCustomSelect) {
+        var remIdxs = allIdxs.slice(i + 1).filter(function(ii) { return fields[ii].tag === 'select' || fields[ii].isCustomSelect; });
+        if (remIdxs.length > 0) {
+          var remData = remIdxs.map(function(ii) { return { selector: fields[ii].selector, index: fields[ii].index, value: fields[ii].fillValue, isCustomSelect: fields[ii].isCustomSelect, hiddenSelectSelector: fields[ii].hiddenSelectSelector, fillIdx: ii }; });
+          await rematchRemainingSelects(remData, 0);
+        }
       }
     }
   }

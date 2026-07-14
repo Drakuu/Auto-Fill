@@ -86,9 +86,26 @@
       <div class="profile-row">
         <button id="exportProfilesBtn" class="profile-btn">Export All</button>
         <button id="importProfilesBtn" class="profile-btn">Import</button>
+        <button id="exportFormBtn" class="profile-btn">Export JSON</button>
       </div>
     </div>
     <input id="importFileInput" type="file" accept=".json" style="display:none">
+
+    <div class="batch-section" style="margin-top:6px">
+      <div class="batch-header" id="batchHeader">
+        <span class="batch-arrow">▸</span>
+        <span class="batch-title">Batch Fill</span>
+      </div>
+      <div class="batch-body" id="batchBody" style="display:none">
+        <div class="batch-row">
+          <button id="saveTemplateBtn" class="opt-btn">Save Template</button>
+          <button id="clearTemplateBtn" class="opt-btn" disabled>Clear</button>
+          <span id="templateStatus" class="template-status" style="font-size:10px;color:var(--text-dim)">No template</span>
+        </div>
+        <textarea id="batchUrls" class="batch-textarea" placeholder="Paste URLs (one per line)..." style="width:100%;min-height:50px;margin:4px 0;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:11px;background:var(--bg-input);color:var(--text);font-family:inherit;resize:vertical"></textarea>
+        <button id="batchFillBtn" class="profile-btn" style="width:100%" disabled>Start Batch Fill</button>
+      </div>
+    </div>
 
     <div id="status" class="status"></div>
     <div class="footer-bar">

@@ -61,6 +61,20 @@ function isFormField(el) {
   return false;
 }
 
+function isOTPField(el) {
+  if (el.tagName !== "INPUT") return false;
+  const ac = (el.getAttribute("autocomplete") || "").toLowerCase();
+  if (ac === "one-time-code") return true;
+  const inputmode = (el.getAttribute("inputmode") || "").toLowerCase();
+  const ml = el.maxLength;
+  const type = (el.type || "").toLowerCase();
+  if ((type === "text" || type === "tel") && inputmode === "numeric" && ml > 0 && ml <= 8) return true;
+  const id = (el.id || "").toLowerCase();
+  const cls = (el.className || "").toLowerCase();
+  if (id.indexOf("otp") >= 0 || cls.indexOf("otp") >= 0) return true;
+  return false;
+}
+
 function isRichText(el) {
   if (el.getAttribute("contenteditable") === "true") return true;
   const cls = (el.className || "").toLowerCase();

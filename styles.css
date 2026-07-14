@@ -733,3 +733,57 @@ h1 {
   font-weight: 400;
   font-family: monospace;
 }
+
+.learned-badge {
+  font-size: 11px;
+  margin-left: 4px;
+  cursor: help;
+}
+
+.batch-section {
+  margin-bottom: 6px;
+}
+
+.batch-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+
+.batch-header:hover {
+  background: var(--bg-hover);
+}
+
+.batch-arrow {
+  font-size: 10px;
+  color: var(--text-muted);
+  transition: transform 0.15s;
+}
+
+.batch-header.open .batch-arrow {
+  transform: rotate(90deg);
+}
+
+.batch-body {
+  padding: 6px 4px;
+}
+
+.batch-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.template-status {
+  font-size: 10px;
+  color: var(--text-dim);
+}

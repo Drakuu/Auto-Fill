@@ -304,6 +304,64 @@ function mainWorldRestoreOriginals(data) {
   } catch(e) { return false; }
 }
 
+function mainWorldDetectOTP() {
+  try {
+    var all = document.querySelectorAll('input');
+    var otpFields = [];
+    all.forEach(function(el) {
+      if (el.offsetParent === null) return;
+      var ac = (el.getAttribute('autocomplete') || '').toLowerCase();
+      if (ac === 'one-time-code') { otpFields.push({ field: el.name || el.id || 'otp', type: 'autocomplete' }); return; }
+      var type = (el.type || '').toLowerCase();
+      var im = (el.getAttribute('inputmode') || '').toLowerCase();
+      var ml = el.maxLength;
+      if (type === 'text' || type === 'tel' || type === 'number') {
+        if ((ac === 'otp' || ac === 'one-time') && ml > 0 && ml <= 8) { otpFields.push({ field: el.name || el.id || 'otp', type: 'autocomplete' }); return; }
+        if (im === 'numeric' && ml > 0 && ml <= 8) { otpFields.push({ field: el.name || el.id || 'otp', type: 'inputmode' }); return; }
+        if (ml > 0 && ml <= 6 && /^\d+$/.test(el.value || '')) { otpFields.push({ field: el.name || el.id || 'otp', type: 'numeric' }); return; }
+      }
+      if ((el.className || '').toLowerCase().indexOf('otp') >= 0 || (el.id || '').toLowerCase().indexOf('otp') >= 0) {
+        otpFields.push({ field: el.name || el.id || 'otp', type: 'class' });
+      }
+    });
+    var sixDigitInputs = [];
+    all.forEach(function(el) {
+      if (el.offsetParent === null) return;
+      var ml = el.maxLength;
+      var type = (el.type || '').toLowerCase();
+      if ((type === 'text' || type === 'tel') && el.offsetParent !== null && ml >= 4 && ml <= 8) {
+        var label = '';
+        var lbl = document.querySelector('label[for="' + (el.id || '') + '"]');
+        if (lbl) label = lbl.textContent.trim().toLowerCase();
+        if (label.indexOf('otp') >= 0 || label.indexOf('code') >= 0 || label.indexOf('verification') >= 0 || label.indexOf('2fa') >= 0 || label.indexOf('mfa') >= 0 || label.indexOf('auth') >= 0) {
+          sixDigitInputs.push({ field: el.name || el.id || 'otp', type: 'label' });
+        }
+      }
+    });
+    var allFound = otpFields.concat(sixDigitInputs);
+    return allFound.length > 0 ? { detected: true, count: allFound.length, fields: allFound } : { detected: false };
+  } catch(e) { return { detected: false, error: e.message }; }
+}
+
+function mainWorldCheckFillIntegrity(items) {
+  try {
+    var needsRefill = [];
+    var all = document.querySelectorAll('input:not([type=submit]):not([type=button]):not([type=reset]):not([type=hidden]):not([type=file]):not([type=image]), textarea, select');
+    (items || []).forEach(function(item) {
+      if (item.type === 'file' || item.type === 'richtext' || item.type === 'checkbox' || item.type === 'radio') return;
+      var el = null;
+      if (item.selector) try { el = document.querySelector(item.selector); } catch(e) {}
+      if (!el) { el = all[item.index]; }
+      if (!el) return;
+      var current = el.value;
+      if (current === '' || current !== item.value) {
+        needsRefill.push(item);
+      }
+    });
+    return needsRefill;
+  } catch(e) { return []; }
+}
+
 function mainWorldDetectPostSubmit() {
   try {
     var result = { status: "unknown", message: "", errors: [], confirmed: false, urlChanged: false };

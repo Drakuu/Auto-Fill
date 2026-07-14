@@ -82,6 +82,7 @@ function renderAll() {
         const label = document.createElement("div"); label.className = "field-label";
         label.textContent = f.label || f.name || f.id || "Field " + (i + 1);
         if (f.required) label.innerHTML += ' <span class="required">*</span>';
+        if (f._learned) label.innerHTML += ' <span class="learned-badge" title="Auto-learned from history">📌</span>';
         const info = document.createElement("div"); info.className = "field-info";
         info.textContent = f.isCustomSelect ? "<custom-select>" : "<" + f.tag + (f.type ? " type=" + f.type : "") + ">";
         const row = document.createElement("div"); row.className = "input-row";
@@ -95,7 +96,10 @@ function renderAll() {
           input.type = f.type === "password" ? "password" : "text";
           input.placeholder = f.placeholder || "Enter value...";
           input.value = f.currentValue || "";
-          input.addEventListener("input", () => { fields[i].fillValue = input.value; });
+          input.addEventListener("input", function() {
+            fields[i].fillValue = input.value;
+            saveLearnedValue(fields[i], input.value);
+          });
           fields[i].fillValue = f.currentValue || "";
           const btn = document.createElement("button"); btn.className = "fill-btn"; btn.textContent = "Fill";
           btn.addEventListener("click", () => doFill(i));
@@ -210,6 +214,43 @@ document.getElementById("autoFillToggle").addEventListener("change", async (e) =
 });
 
 document.getElementById("overlayToggle").addEventListener("click", toggleOverlay);
+
+document.getElementById("exportFormBtn").addEventListener("click", exportFormData);
+
+document.getElementById("batchHeader").addEventListener("click", function() {
+  var body = document.getElementById("batchBody");
+  var header = document.getElementById("batchHeader");
+  body.style.display = body.style.display === "none" ? "block" : "none";
+  header.classList.toggle("open");
+});
+
+document.getElementById("saveTemplateBtn").addEventListener("click", async function() {
+  var urlsText = document.getElementById("batchUrls").value;
+  var urls = urlsText.split("\n").filter(function(u) { return u.trim(); });
+  if (urls.length === 0) { showStatus("Enter at least one URL first", "warning"); return; }
+  await saveBatchTemplate(urls);
+  document.getElementById("templateStatus").textContent = "Template: " + fields.length + " fields, " + urls.length + " URLs";
+  document.getElementById("clearTemplateBtn").disabled = false;
+  document.getElementById("batchFillBtn").disabled = false;
+  showStatus("Batch template saved");
+});
+
+document.getElementById("clearTemplateBtn").addEventListener("click", async function() {
+  await clearBatchTemplate();
+  document.getElementById("templateStatus").textContent = "No template";
+  document.getElementById("clearTemplateBtn").disabled = true;
+  document.getElementById("batchFillBtn").disabled = true;
+  showStatus("Template cleared");
+});
+
+document.getElementById("batchFillBtn").addEventListener("click", async function() {
+  var urlsText = document.getElementById("batchUrls").value;
+  var urls = urlsText.split("\n").filter(function(u) { return u.trim(); });
+  if (urls.length === 0) { showStatus("No URLs", "warning"); return; }
+  this.disabled = true;
+  await batchFillUrls(urls);
+  this.disabled = false;
+});
 
 document.querySelectorAll(".tab").forEach(t => {
   t.addEventListener("click", () => switchTab(t.dataset.tab));

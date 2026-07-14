@@ -23,6 +23,30 @@ function syncPasswordConfirms() {
   });
 }
 
+async function autoGenerateValuesWithLearning() {
+  var host = getHostname(currentUrl);
+  var learned = await getLearnedValues(host);
+  fields.forEach(function(f, i) {
+    if (f.fillValue && f.fillValue.length > 0) return;
+    var learnKey = f.name || f.id || "f" + f.index;
+    if (learned[learnKey]) {
+      f.fillValue = learned[learnKey].value;
+      f._learned = true;
+    } else {
+      f.fillValue = generateRandomValue(f);
+    }
+  });
+  syncPasswordConfirms();
+  document.querySelectorAll(".field-value").forEach(function(el, i) {
+    if (fields[i]) {
+      el.value = fields[i].fillValue || "";
+      if (fields[i]._learned) el.dataset.learned = "true";
+      else delete el.dataset.learned;
+    }
+  });
+  showStatus("Values generated" + (Object.keys(learned).length > 0 ? " (with learning)" : ""));
+}
+
 function autoGenerateValues() {
   fields.forEach((f, i) => {
     const val = generateRandomValue(f);
@@ -37,9 +61,10 @@ function autoGenerateValues() {
 
 async function autoFillAndSubmit() {
   _undoData = await captureOriginals();
-  autoGenerateValues();
+  await autoGenerateValuesWithLearning();
   var count = await fillWithSequencing();
   await fillConditionalFields();
+  var repaired = await autoRepair();
   const strategy = document.getElementById("submitStrategy")?.value || "auto";
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return;
@@ -58,15 +83,20 @@ async function autoFillAndSubmit() {
       world: "MAIN"
     });
     var state = postRes?.[0]?.result || { status: "unknown" };
+    var hasOTP = await detectOTPAfterSubmit();
+    var statusMsg = "";
     if (state.status === "success") {
-      showStatus("✅ Form submitted successfully", "success");
+      statusMsg = "✅ Form submitted successfully";
     } else if (state.status === "confirmed") {
-      showStatus("✅ Confirmed & submitted", "success");
+      statusMsg = "✅ Confirmed & submitted";
     } else if (state.status === "errors") {
-      showStatus("⚠️ " + state.errors.length + " validation error(s)", "warning");
+      statusMsg = "⚠️ " + state.errors.length + " validation error(s)";
     } else {
-      showStatus("Auto filled & submitted!");
+      statusMsg = "Auto filled & submitted!";
     }
+    if (repaired > 0) statusMsg += " (" + repaired + " repaired)";
+    if (hasOTP) statusMsg += " 📱 OTP field detected";
+    showStatus(statusMsg, state.status === "errors" ? "warning" : state.status === "success" || state.status === "confirmed" ? "success" : "");
   } catch (e) {
     showStatus("Submit failed: " + e.message, "error");
   }
@@ -228,17 +258,174 @@ async function fillConditionalFields() {
   }
 }
 
+async function autoRepair() {
+  var [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) return 0;
+  for (var attempt = 0; attempt < 3; attempt++) {
+    await new Promise(function(r) { setTimeout(r, 2000); });
+    var fillData = [];
+    fields.forEach(function(f) {
+      if (f.fillValue && f.type !== "file") {
+        fillData.push({ selector: f.selector, index: f.index, value: f.fillValue, type: f.type });
+      }
+    });
+    if (fillData.length === 0) break;
+    var r2 = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: mainWorldCheckFillIntegrity,
+      args: [fillData],
+      world: "MAIN"
+    });
+    var needsRefill = r2?.[0]?.result || [];
+    if (needsRefill.length === 0) break;
+    var refillItems = needsRefill.map(function(item) {
+      var f = fields.find(function(ff) { return (ff.selector && ff.selector === item.selector) || ff.index === item.index; });
+      return { selector: item.selector, index: item.index, value: item.value, isCustomSelect: f && f.isCustomSelect, hiddenSelectSelector: f && f.hiddenSelectSelector, isRichText: f && f.type === "richtext" };
+    });
+    await execInMainWorld("fill", refillItems);
+    await new Promise(function(r) { setTimeout(r, 500); });
+    if (attempt === 2) return needsRefill.length;
+  }
+  return 0;
+}
+
+async function detectOTPAfterSubmit() {
+  var [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) return false;
+  await new Promise(function(r) { setTimeout(r, 1500); });
+  var r = await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: mainWorldDetectOTP,
+    args: [],
+    world: "MAIN"
+  });
+  var otpRes = r?.[0]?.result || { detected: false };
+  return otpRes.detected;
+}
+
+function exportFormData() {
+  var host = getHostname(currentUrl);
+  var ts = new Date().toISOString().replace(/[:.]/g, "-").substring(0, 19);
+  var data = {
+    exportedAt: ts,
+    domain: host,
+    url: currentUrl,
+    fields: fields.map(function(f) {
+      return {
+        label: f.label || f.name || f.id || "field",
+        name: f.name || "",
+        type: f.type,
+        value: f.fillValue || "",
+        required: !!f.required
+      };
+    })
+  };
+  var json = JSON.stringify(data, null, 2);
+  var blob = new Blob([json], { type: "application/json" });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = host + "-" + ts + ".json";
+  a.click();
+  URL.revokeObjectURL(url);
+  showStatus("Exported!");
+}
+
+async function batchFillUrls(urls) {
+  if (!urls || urls.length === 0) { showStatus("No URLs provided", "warning"); return; }
+  var template = await saveBatchTemplate();
+  if (!template || template.fields.length === 0) { showStatus("No template — scan fields first", "warning"); return; }
+  showStatus("Opening tabs...");
+  var total = urls.length;
+  var filled = 0;
+  var skipped = 0;
+  for (var i = 0; i < total; i++) {
+    var url = urls[i].trim();
+    if (!url) continue;
+    if (!url.startsWith("http")) url = "https://" + url;
+    try {
+      var tab = await chrome.tabs.create({ url: url, active: false });
+      await new Promise(function(r) { setTimeout(r, 3000); });
+      var tabId = tab.id;
+      try {
+        await chrome.scripting.executeScript({ target: { tabId: tabId }, files: ["content.js"] });
+        await new Promise(function(r) { setTimeout(r, 500); });
+      } catch(e) {}
+      var csRes = null;
+      try {
+        csRes = await chrome.tabs.sendMessage(tabId, { action: "getFormFields" });
+      } catch(e) {}
+      if (!csRes?.fields || csRes.fields.length === 0) {
+        chrome.tabs.remove(tabId);
+        skipped++;
+        continue;
+      }
+      var matchFields = [];
+      template.fields.forEach(function(tf) {
+        var matched = csRes.fields.find(function(cf) {
+          return (tf.name && cf.name && cf.name === tf.name) || (tf.id && cf.id && cf.id === tf.id);
+        });
+        if (matched) {
+          matchFields.push({
+            selector: matched.selector,
+            index: matched.index,
+            value: tf.fillValue,
+            isCustomSelect: matched.isCustomSelect,
+            hiddenSelectSelector: matched.hiddenSelectSelector
+          });
+        }
+      });
+      if (matchFields.length > 0) {
+        await chrome.scripting.executeScript({
+          target: { tabId: tabId },
+          func: function(items) {
+            var ns = (Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value') || {}).set
+              || (Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value') || {}).set;
+            items.forEach(function(item) {
+              try {
+                var field = null;
+                if (item.selector) try { field = document.querySelector(item.selector); } catch(e) {}
+                if (!field) {
+                  var all = document.querySelectorAll('input:not([type=submit]):not([type=button]):not([type=reset]):not([type=hidden]):not([type=file]):not([type=image]), textarea, select');
+                  field = all[item.index];
+                }
+                if (!field) return;
+                if (ns) ns.call(field, item.value);
+                field.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+                if (field.tagName.toLowerCase() === 'select') field.dispatchEvent(new Event('change', { bubbles: true }));
+              } catch(e) {}
+            });
+          },
+          args: [matchFields],
+          world: "MAIN"
+        });
+        filled++;
+      } else {
+        skipped++;
+      }
+      chrome.tabs.remove(tabId);
+      showStatus(filled + "/" + total + " tabs filled (" + skipped + " skipped)");
+    } catch(e) {
+      skipped++;
+    }
+  }
+  showStatus(filled + " of " + total + " tabs filled" + (skipped > 0 ? " (" + skipped + " skipped)" : ""));
+}
+
 async function fillAll() {
   _undoData = await captureOriginals();
-  autoGenerateValues();
+  await autoGenerateValuesWithLearning();
   var count = await fillWithSequencing();
   await fillConditionalFields();
-  showStatus(count + " field" + (count !== 1 ? "s" : "") + " filled");
+  var repaired = await autoRepair();
+  var statusMsg = count + " field" + (count !== 1 ? "s" : "") + " filled";
+  if (repaired > 0) statusMsg += " (" + repaired + " auto-repaired)";
+  showStatus(statusMsg);
 }
 
 async function fillMultiStep() {
   _undoData = await captureOriginals();
-  autoGenerateValues();
+  await autoGenerateValuesWithLearning();
   var count = await fillWithSequencing();
   var totalFilled = count;
   var [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -300,7 +487,7 @@ async function fillDialog() {
   fields = csRes.fields;
   buttons = csRes.buttons;
   renderAll();
-  autoGenerateValues();
+  await autoGenerateValuesWithLearning();
   var count = await fillWithSequencing();
   showStatus("Dialog fields filled");
   await new Promise(function(res) { setTimeout(res, 300); });

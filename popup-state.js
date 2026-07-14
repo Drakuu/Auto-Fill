@@ -71,3 +71,67 @@ async function ensureCS() {
 }
 
 function getProfileKey(host) { return "profiles_" + host; }
+
+function getLearningKey(host) { return "learned_" + host; }
+
+async function saveLearnedValue(field, value) {
+  var host = getHostname(currentUrl);
+  if (!host || host === "unknown" || !value) return;
+  var key = getLearningKey(host);
+  var key2 = field.name || field.id || "f" + field.index;
+  var res = await chrome.storage.sync.get([key]);
+  var data = res[key] || {};
+  if (!data[key2]) data[key2] = { value: value, count: 0 };
+  else { data[key2].value = value; }
+  data[key2].count = (data[key2].count || 0) + 1;
+  await chrome.storage.sync.set({ [key]: data });
+}
+
+async function getLearnedValues(host) {
+  if (!host || host === "unknown") return {};
+  var key = getLearningKey(host);
+  var res = await chrome.storage.sync.get([key]);
+  return res[key] || {};
+}
+
+async function getLearnedValueForField(field, host) {
+  var data = await getLearnedValues(host);
+  var key = field.name || field.id || "f" + field.index;
+  return data[key] || null;
+}
+
+var _batchTemplate = null;
+
+function getBatchTemplateKey() { return "batchTemplate"; }
+
+async function saveBatchTemplate(urls) {
+  var key = getBatchTemplateKey();
+  var data = { timestamp: Date.now(), fields: [], urls: urls || [] };
+  fields.forEach(function(f) {
+    data.fields.push({
+      name: f.name || "",
+      id: f.id || "",
+      label: f.label || "",
+      selector: f.selector || "",
+      index: f.index,
+      type: f.type,
+      fillValue: f.fillValue || ""
+    });
+  });
+  await chrome.storage.local.set({ [key]: data });
+  _batchTemplate = data;
+  return data;
+}
+
+async function loadBatchTemplate() {
+  var key = getBatchTemplateKey();
+  var res = await chrome.storage.local.get([key]);
+  _batchTemplate = res[key] || null;
+  return _batchTemplate;
+}
+
+async function clearBatchTemplate() {
+  var key = getBatchTemplateKey();
+  await chrome.storage.local.remove(key);
+  _batchTemplate = null;
+}

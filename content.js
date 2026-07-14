@@ -56,8 +56,16 @@ function isFormField(el) {
   if (tag === "textarea" || tag === "select") return true;
   if (tag === "input") {
     const type = (el.type || "").toLowerCase();
-    return !["submit", "button", "reset", "hidden", "file", "image"].includes(type);
+    return !["submit", "button", "reset", "hidden", "image"].includes(type);
   }
+  return false;
+}
+
+function isRichText(el) {
+  if (el.getAttribute("contenteditable") === "true") return true;
+  const cls = (el.className || "").toLowerCase();
+  if (cls.includes("ql-editor") || cls.includes("ProseMirror") || cls.includes("tox-tinymce")) return true;
+  if (el.hasAttribute("data-slate-editor")) return true;
   return false;
 }
 
@@ -98,14 +106,54 @@ function findCustomSelect(inputEl) {
 
 function scanForFields(root, result, topForms, formLabels, context) {
   const ctx = context || { type: "document" };
-  const all = root.querySelectorAll ? root.querySelectorAll("input, textarea, select, button, a, [role=button]") : [];
+  const all = root.querySelectorAll ? root.querySelectorAll("input, textarea, select, [contenteditable], button, a[class*=btn], a[class*=button], a[role=button], [role=button]") : [];
   all.forEach(el => {
+    if (isRichText(el) && el.offsetParent !== null) {
+      var fieldsetEl = el.closest("fieldset");
+      var fieldsetLabel = "";
+      if (fieldsetEl) {
+        var legend = fieldsetEl.querySelector("legend");
+        if (legend) fieldsetLabel = legend.textContent.trim();
+        else fieldsetLabel = fieldsetEl.getAttribute("aria-label") || fieldsetEl.getAttribute("title") || "";
+      }
+      const entry = {
+        kind: "field", index: result.fields.length,
+        tag: "div", type: "richtext",
+        name: el.id || "", id: el.id || "",
+        placeholder: el.getAttribute("placeholder") || el.getAttribute("aria-placeholder") || "",
+        label: getLabel(el),
+        autocomplete: "", pattern: "", maxLength: "", minLength: "",
+        min: "", max: "", step: "",
+        currentValue: el.textContent || "", required: false,
+        selector: getUniqueSelector(el),
+        options: undefined, isCustomSelect: false, hiddenSelectSelector: "",
+        formIndex: -1, formLabel: null,
+        fieldsetLabel: fieldsetLabel, sectionLabel: fieldsetLabel || null
+      };
+      if (ctx.type === "shadow") entry.shadowHost = getUniqueSelector(ctx.host);
+      if (ctx.type === "iframe") {
+        const allIframes = document.querySelectorAll("iframe");
+        for (let i = 0; i < allIframes.length; i++) {
+          if (allIframes[i] === ctx.iframeEl) { entry.iframeIndex = i; break; }
+        }
+      }
+      result.fields.push(entry);
+      return;
+    }
     if (isFormField(el)) {
       const parentForm = el.closest("form");
       const formIdx = parentForm ? Array.from(topForms).indexOf(parentForm) : -1;
       const options = el.tagName.toLowerCase() === "select"
         ? Array.from(el.options).map(o => o.value).filter(v => v)
         : undefined;
+      var fieldsetEl = el.closest("fieldset");
+      var fieldsetLabel = "";
+      if (fieldsetEl) {
+        var legend = fieldsetEl.querySelector("legend");
+        if (legend) fieldsetLabel = legend.textContent.trim();
+        else fieldsetLabel = fieldsetEl.getAttribute("aria-label") || fieldsetEl.getAttribute("title") || "";
+      }
+      var sectionLabel = fieldsetLabel || (formIdx >= 0 ? formLabels[formIdx] : null);
       const entry = {
         kind: "field", index: result.fields.length,
         tag: el.tagName.toLowerCase(), type: el.type || "text",
@@ -124,7 +172,9 @@ function scanForFields(root, result, topForms, formLabels, context) {
         isCustomSelect: false,
         hiddenSelectSelector: "",
         formIndex: formIdx,
-        formLabel: formIdx >= 0 ? formLabels[formIdx] : null
+        formLabel: formIdx >= 0 ? formLabels[formIdx] : null,
+        fieldsetLabel: fieldsetLabel,
+        sectionLabel: sectionLabel
       };
       if (entry.tag === "input" && (!entry.options || !entry.options.length)) {
         const cs = findCustomSelect(el);

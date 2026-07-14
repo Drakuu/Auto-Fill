@@ -49,7 +49,10 @@
 
     <div class="footer-actions">
       <button id="fillAllBtn" disabled>Fill All</button>
+      <button id="fillStepBtn" disabled>Fill Steps</button>
+      <button id="fillDialogBtn" disabled>Fill Dialog</button>
       <button id="autoSubmitBtn" class="primary-btn" disabled>Fill &amp; Submit</button>
+      <button id="undoBtn" disabled>Undo</button>
       <button id="clearAllBtn" disabled>Cancel</button>
     </div>
     <div class="options-row">
@@ -65,6 +68,7 @@
       <label class="opt-label">
         <input type="checkbox" id="autoFillToggle"> Auto-fill on load
       </label>
+      <button id="overlayToggle" class="opt-btn">Show on page</button>
     </div>
 
     <div class="profile-section">
@@ -105,7 +109,12 @@
       </button>
     </div>
   </div>
-  <script src="popup.js"></script>
+  <script src="popup-state.js"></script>
+  <script src="popup-generators.js"></script>
+  <script src="popup-main-world.js"></script>
+  <script src="popup-fill.js"></script>
+  <script src="popup-profiles.js"></script>
+  <script src="popup-ui.js"></script>
 </body>
 
 </html>

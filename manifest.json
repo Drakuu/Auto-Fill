@@ -10,13 +10,17 @@
   "background": {
     "service_worker": "background.js"
   },
+  "commands": {
+    "fill-all": { "suggested_key": { "default": "Ctrl+Shift+F" }, "description": "Fill all fields on the page" },
+    "fill-submit": { "suggested_key": { "default": "Ctrl+Shift+S" }, "description": "Fill all fields and submit" }
+  },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
       "js": ["content.js"]
     }
   ],
-  "permissions": ["storage", "activeTab", "scripting", "alarms"],
+  "permissions": ["storage", "activeTab", "scripting", "alarms", "contextMenus"],
   "host_permissions": ["https://*/*", "http://*/*"],
   "icons": {
     "16": "icons/icon16.png",

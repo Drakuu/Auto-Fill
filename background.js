@@ -33,10 +33,56 @@ async function checkUpdate() {
   } catch {}
 }
 
+function setupContextMenus() {
+  chrome.contextMenus.removeAll(function() {
+    chrome.contextMenus.create({ id: "qf-fill", title: "Fill all fields", contexts: ["page", "editable"] });
+    chrome.contextMenus.create({ id: "qf-fill-submit", title: "Fill & Submit", contexts: ["page", "editable"] });
+  });
+}
+
 try {
   chrome.runtime.onInstalled.addListener(() => {
     checkUpdate();
     chrome.alarms.create("checkUpdate", { periodInMinutes: 5 });
+    setupContextMenus();
+  });
+
+  chrome.commands.onCommand.addListener((command, tab) => {
+    if (!tab?.id) return;
+    if (command === "fill-all") {
+      chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: contextMenuFillAll,
+        args: [],
+        world: "MAIN"
+      });
+    } else if (command === "fill-submit") {
+      chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: contextMenuFillAndSubmit,
+        args: [],
+        world: "MAIN"
+      });
+    }
+  });
+
+  chrome.contextMenus.onClicked.addListener((info, tab) => {
+    if (!tab?.id) return;
+    if (info.menuItemId === "qf-fill") {
+      chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: contextMenuFillAll,
+        args: [],
+        world: "MAIN"
+      });
+    } else if (info.menuItemId === "qf-fill-submit") {
+      chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: contextMenuFillAndSubmit,
+        args: [],
+        world: "MAIN"
+      });
+    }
   });
 
   chrome.alarms.onAlarm.addListener((alarm) => {
@@ -68,8 +114,10 @@ try {
         if (!profile) return;
 
         const data = Object.entries(profile).map(([key, value]) => {
-          const idx = parseInt(key.replace("i", ""), 10);
-          return { index: idx, value, selector: "" };
+          var idx = key.startsWith("i") ? parseInt(key.replace("i", ""), 10) : -1;
+          var name = key.startsWith("n_") ? key.substring(2) : "";
+          var id = key.startsWith("id_") ? key.substring(3) : "";
+          return { index: idx, value, name, id, selector: "" };
         });
 
         chrome.scripting.executeScript({
@@ -84,6 +132,59 @@ try {
 
 } catch (e) {
   console.error("Quick Fill background init error:", e);
+}
+
+function contextMenuFillAll() {
+  try {
+    var fields = [];
+    var all = document.querySelectorAll('input:not([type=submit]):not([type=button]):not([type=reset]):not([type=hidden]):not([type=file]):not([type=image]), textarea, select, [contenteditable]');
+    all.forEach(function(el, i) {
+      if (el.offsetParent === null) return;
+      fields.push({ el: el, index: i, type: el.type || 'text', tag: el.tagName.toLowerCase() });
+    });
+    if (fields.length === 0) return;
+    var ns = (Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value') || {}).set
+      || (Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value') || {}).set;
+    fields.forEach(function(f) {
+      var val = f.type === 'checkbox' ? 'on' : f.type === 'number' ? Math.floor(Math.random() * 100) + 1 : f.type === 'email' ? 'user' + Math.floor(Math.random() * 1000) + '@gmail.com' : generateWord() + ' ' + generateWord() + ' ' + generateWord();
+      if (f.tag === 'select') {
+        var opts = Array.from(f.el.options).filter(function(o) { return o.value; });
+        if (opts.length) val = opts[Math.floor(Math.random() * opts.length)].value;
+      }
+      if (ns && f.type !== 'checkbox' && f.type !== 'radio') ns.call(f.el, f.type === 'number' ? Number(val) : val);
+      f.el.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+      if (f.tag === 'select') f.el.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  } catch(e) {}
+  function generateWord() { return ['alpha','beta','gamma','delta','omega','sigma','prime','edge','peak','core','base','nova','pulse','drive','wave','flux','grid','node','byte','hive','synth','neo','zen','ark','forge','tide','bold','cast','peak','dawn','echo'][Math.floor(Math.random() * 32)]; }
+}
+
+function contextMenuFillAndSubmit() {
+  try {
+    contextMenuFillAll();
+    setTimeout(function() {
+      var all = document.querySelectorAll('button, input[type=submit], input[type=button], a[class*=btn], a[role=button], [role=button]');
+      var best = null, bestScore = -1;
+      all.forEach(function(el) {
+        var text = (el.textContent || el.value || '').trim().toLowerCase();
+        if (el.offsetParent === null) return;
+        var score = 0;
+        if ((el.type || '').toLowerCase() === 'submit') score += 10;
+        if (text.includes('submit') || text.includes('save') || text.includes('send') || text.includes('update')) score += 5;
+        if (text.includes('add') || text.includes('create') || text.includes('new')) score += 2;
+        if (el.hasAttribute('onclick')) score += 3;
+        if (el.tagName.toLowerCase() === 'button') score += 2;
+        if ((el.className || '').toLowerCase().includes('primary')) score += 2;
+        if (score > bestScore) { bestScore = score; best = el; }
+      });
+      if (best) {
+        best.click();
+        best.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+        best.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+        best.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+      }
+    }, 300);
+  } catch(e) {}
 }
 
 function autoFillFields(data) {
@@ -113,9 +214,11 @@ function autoFillFields(data) {
         }
       }
       if (!field) {
-        if (item.selector) try { field = document.querySelector(item.selector); } catch(e) {}
-        if (!field) {
-          var all = document.querySelectorAll('input:not([type=submit]):not([type=button]):not([type=reset]):not([type=hidden]):not([type=file]):not([type=image]), textarea, select');
+        if (item.name) { try { field = document.querySelector('[name="' + item.name.replace(/"/g, '') + '"]'); } catch(e) {} }
+        if (!field && item.id) { try { field = document.getElementById(item.id); } catch(e) {} }
+        if (!field && item.selector) { try { field = document.querySelector(item.selector); } catch(e) {} }
+        if (!field && item.index >= 0) {
+          var all = document.querySelectorAll('input:not([type=submit]):not([type=button]):not([type=reset]):not([type=hidden]):not([type=file]):not([type=image]), textarea, select, [contenteditable]');
           field = all[item.index];
         }
       }

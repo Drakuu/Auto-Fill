@@ -1,33 +1,73 @@
-# Quick Fill
+# Quick Fill — Chrome Extension
 
-Chrome extension that scans any webpage for form fields and buttons, lets you fill them with custom values or auto-generated random data, and submit the form — all from a popup.
+Scan any webpage for form fields and buttons, fill them with custom or auto-generated data, and submit forms — all from a single popup. Built with Manifest V3.
 
 ## Features
 
-- Scan any page for `<input>`, `<textarea>`, `<select>`, `<button>` elements
-- Fill fields with custom values or auto-generated random data
-- Smart field detection: autocomplete, HTML type, label text, name, placeholder
-- Custom dropdown detection (React Select, shadcn/ui combobox, etc.) with hidden `<select>` sync
-- Named profiles per domain — save/load/delete/export/import
-- Auto-fill on page load for whitelisted domains
-- Dark/light mode
-- Field constraints respected (maxLength, min, max, step)
-- Shadow DOM and same-origin iframe support
-- 55+ intelligent generators (name, email, phone, address, company, etc.)
-- Chained/cascading select support with 500ms sequencing
+### Core
+- **Instant field scan** — detects `<input>`, `<textarea>`, `<select>`, `<button>`, rich text editors, custom dropdowns (ARIA combobox), file uploads, and Shadow DOM/iframe fields
+- **55+ smart generators** — email, phone, password, credit card, SSN, passport, address, company, job title, lorem ipsum, and more
+- **Field constraints respected** — `maxLength`, `minLength`, `min`, `max`, `step` applied to all generated values
+- **Detection pipeline** — `autocomplete` attribute → HTML type → loose type → 55 label regex rules → text fallback
+- **Dark/light mode** — persisted to storage
+
+### Workflow
+
+| Feature | What |
+|---------|------|
+| **Fill All** | Auto-generate and fill every field with one click |
+| **Fill & Submit** | Fill all fields + scored submit button finder |
+| **Multi-step forms** | Detect "Next"/"Continue" buttons, fill up to 10 wizard steps |
+| **Dialog/modal fill** | Click "Add/Create/Edit" buttons, wait for modal, fill, save |
+| **Conditional fields** | Re-scan after fill up to 5× for dynamically appearing fields |
+| **Undo fill** | Capture originals before fill, restore all fields in one click |
+| **Auto-repair** | Re-check fields 2s after fill — if JS re-rendered them empty, re-fill (3 retries) |
+
+### Intelligence
+
+| Feature | What |
+|---------|------|
+| **Auto-learning** | Remembers values you type per domain → auto-suggests them next visit (📌 badge) |
+| **Password sync** | Copies password to confirm/verify/retype fields automatically |
+| **Smart profile matching** | Save/load by field `name` or `id` (not fragile index) — survives page changes |
+| **Fieldset grouping** | Fields grouped by `<fieldset>` legends, collapsible sections in popup |
+
+### Post-Submit
+
+| Feature | What |
+|---------|------|
+| **Validation error detection** | Checks `aria-invalid`, `:invalid`, error elements 600ms after submit click |
+| **Confirmation auto-click** | Detects "Yes/OK/Confirm/Proceed" dialogs and clicks them |
+| **OTP/2FA detection** | Scans for one-time code fields after submit (autocomplete, inputmode, maxlength, label) |
+| **Export JSON** | Download all filled values as `domain-timestamp.json` |
+
+### Access
+
+| Feature | What |
+|---------|------|
+| **Right-click context menu** | "Fill all fields" / "Fill & Submit" without opening popup |
+| **Keyboard shortcuts** | Ctrl+Shift+F (fill all), Ctrl+Shift+S (fill & submit) — customizable at `chrome://extensions/shortcuts` |
+| **Debug overlay** | Toggle green/red/yellow field outlines + floating value labels on the page |
+
+### Batch
+
+| Feature | What |
+|---------|------|
+| **Batch fill** | Save current form as template, paste a list of URLs, fill all matching fields across tabs |
+| **Auto-fill on load** | Whitelist domains via toggle — auto-fills on page load |
 
 ## Installation
 
-### From source (for development / team use)
+### From source
 
-1. Clone the repo:
-   ```bash
-   git clone https://github.com/Drakuu/Auto-Fill.git
-   ```
-2. Open Chrome → `chrome://extensions`
-3. Enable **Developer mode** (top right)
-4. Click **Load Unpacked** → select the cloned folder
-5. Pin the extension in your toolbar
+```bash
+git clone https://github.com/Drakuu/Auto-Fill.git
+```
+
+1. Open Chrome → `chrome://extensions`
+2. Enable **Developer mode**
+3. Click **Load Unpacked** → select the folder
+4. Pin the extension in your toolbar
 
 ### From Chrome Web Store
 
@@ -35,20 +75,13 @@ Chrome extension that scans any webpage for form fields and buttons, lets you fi
 
 ## Auto-Update (Team Use)
 
-After the initial clone, run the watcher script once. It stays in the background and auto-updates the extension whenever the developer pushes to GitHub.
+Run once, stays in background. Polls GitHub every 2 minutes, auto-pulls, auto-reloads.
 
 ### Windows
 
 ```powershell
-# Double-click watcher.ps1, or run in terminal:
 .\watcher.ps1
 ```
-
-To make it start on every boot:
-1. Press `Win + R`, type `shell:startup`, press Enter
-2. Right-click → New → Shortcut
-3. For location, enter: `powershell.exe -File "C:\path\to\watcher.ps1"`
-4. Click Finish
 
 ### Linux / Mac
 
@@ -57,104 +90,83 @@ chmod +x watcher.sh
 ./watcher.sh
 ```
 
-To make it start on every boot (crontab):
-```bash
-crontab -e
-# Add this line:
-@reboot cd /home/user/path/to/Auto-Fill && ./watcher.sh
-```
+### Manual update
 
-### How it works
-
-1. **Watcher script** polls GitHub every 2 minutes for new version
-2. When new version detected → runs `git pull` → writes timestamp to `version.json`
-3. **Background service worker** polls every 5 minutes, detects the timestamp
-4. Calls `chrome.runtime.reload()` → extension updates instantly
-
-No manual `git pull`, no clicking Reload — fully automatic.
-
-### Without watcher (manual)
-
-If you prefer not to run a background script, just run:
 ```bash
 cd /path/to/Auto-Fill && git pull
 ```
-Then click **Reload** button in the extension popup.
 
-## Usage
-
-1. Click the Quick Fill icon in the toolbar
-2. The popup scans the current page and lists all fields and buttons
-3. Fill individual fields by typing a value and clicking **Fill**
-4. Click **Fill All** to auto-generate random values for every field
-5. Click **Fill & Submit** to fill all fields and click the submit button
-6. Use the **Buttons** tab to click individual buttons
-7. Save field values as a named profile for the current domain
+Then click **Reload** button in the popup.
 
 ## Project Structure
 
 ```
 form-filler-extension/
-├── manifest.json           # Extension configuration (Manifest V3)
-├── version.json            # Version for update checking
-├── background.js           # Service worker — update checker + auto-fill
-├── popup.html              # Popup UI
-├── popup.js                # Popup logic — form detection, fill, profiles
-├── content.js              # Injected into pages — field scanning
-├── styles.css              # Popup styling (light/dark)
-├── watcher.ps1             # Windows auto-updater
-├── watcher.sh              # Linux/Mac auto-updater
-├── update.ps1              # Manual git pull script (Windows)
-├── plan.md                 # Development roadmap
-└── icons/
-    ├── icon16.png
-    ├── icon48.png
-    └── icon128.png
+├── manifest.json              # v1.1.0, MV3, commands, contextMenus
+├── version.json               # {"version":"1.1.0"}
+├── background.js              # Service worker — updates, context menus, keyboard shortcuts, auto-fill
+├── content.js                 # Injected into pages — field/button scanning, rich text, fieldset grouping
+├── popup.html                 # Popup UI — loads 6 scripts
+├── popup-state.js             # State variables + utilities + learning + batch template
+├── popup-generators.js        # 55+ generators + detection tables + 55 label rules
+├── popup-main-world.js        # All mainWorld* functions (injected via executeScript)
+├── popup-fill.js              # Fill orchestration: sequencing, multi-step, dialog, undo, export, batch
+├── popup-profiles.js          # Profile save/load/delete/export/import
+├── popup-ui.js                # UI rendering, event listeners, theme, batch UI
+├── styles.css                 # Light/dark CSS custom properties
+├── icons/                     # icon16.png, icon48.png, icon128.png
+├── analysis.md                # Full priority matrix (P0-P4)
+├── README.md                  # This file
+├── watcher.ps1                # Windows auto-updater
+└── watcher.sh                 # Linux/Mac auto-updater
 ```
+
+## Architecture
+
+```
+Popup ──executeScript({world:"MAIN"})──> Page (fill/clicks)
+Popup ──tabs.sendMessage ──> Content Script (field scanning)
+Content Script ──runtime.sendMessage ──> Background (auto-fill trigger)
+Background ──executeScript({world:"MAIN"}) ──> Page (auto-fill, context menu, keyboard shortcuts)
+```
+
+- **No `inject.js`, no `web_accessible_resources`, no hidden div bridge.** Fill logic serializes functions and runs them directly in the page's MAIN world via `chrome.scripting.executeScript`. CSP-safe.
+- Content script is isolated from page JS — only handles ping + getFormFields (recursive DOM scan).
 
 ## Development
 
-### Making changes
-
 ```bash
-# 1. Make your changes
-# 2. Update version in manifest.json and version.json
-# 3. Commit and push
-git add .
-git commit -m "v1.0.x"
-git push
+# Bump version
+#   manifest.json: "version": "1.X.X"
+#   version.json:  {"version":"1.X.X"}
+git add . && git commit -m "v1.X.X" && git push
 ```
 
-The next time the watcher script runs on team members' machines, they'll get the update automatically.
+### Reload
+- `chrome://extensions` → Reload, or click **Reload** in the popup
 
-### Testing
-
-1. Go to `chrome://extensions`
-2. Click **Reload** on the extension card
-3. Navigate to a page with a form
-4. Click the Quick Fill icon
-5. Check the console for logs (Right-click popup → Inspect)
+### View logs
+- Popup: Right-click popup → Inspect
+- Background: `chrome://extensions` → Service Worker link
+- Content script: Right-click page → Inspect → Console
 
 ## Permissions
 
 | Permission | Reason |
 |-----------|--------|
-| `storage` | Save profiles, auto-fill domains, theme preference |
-| `activeTab` | Access the current tab's content |
-| `scripting` | Execute fill scripts in the page context (`world: "MAIN"`) |
-| `alarms` | Periodic update checks |
-| `host_permissions` | Access GitHub for version checking |
+| `storage` | Profiles, auto-fill domains, learning data, theme, batch templates |
+| `activeTab` | Access current tab's content |
+| `scripting` | Execute fill logic in page context (`world: "MAIN"`) |
+| `alarms` | Periodic GitHub update checks |
+| `contextMenus` | Right-click → Fill all fields / Fill & Submit |
 
-## Publishing to Chrome Web Store
+## Known Limitations
 
-1. Update version in `manifest.json` and `version.json`
-2. Zip the folder (all files at root level)
-3. Go to [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole)
-4. Pay the one-time $5 registration fee
-5. Upload the ZIP and fill in the details
+- **Closed Shadow DOM** (`mode: "closed"`) — `shadowRoot` is `null`, fields inside are invisible
+- **Cross-origin iframes** — Blocked by browser security; only same-origin iframes scanned
+- **React onChange** — Some React 18+ synthetic event handlers may not catch the native dispatch chain
+- **Batch fill** — Creates and closes background tabs; some sites may detect this as automation
 
-## Notes
+## License
 
-- Some pages (React, Vue, Angular) may not detect synthetic events. The extension runs fill logic in the **main world** via `chrome.scripting.executeScript({ world: "MAIN" })` and dispatches native + React event chains (`mousedown`, `mouseup`, `click`, `input`, `change`, `blur`, `pointerdown`, `pointerup`) plus direct React `onClick` invocation.
-- Custom dropdown components are detected via ARIA attributes (`role="combobox"`, `aria-haspopup="listbox"`) and synced with hidden `<select>` elements when found.
-- Field constraints (`maxLength`, `min`, `max`, `step`) are enforced on all generated values.
+MIT

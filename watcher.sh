@@ -22,7 +22,7 @@ while true; do
         if [ "$REMOTE_VER" != "" ] && [ "$REMOTE_VER" != "$LOCAL_VER" ]; then
             echo "$(date +%H:%M:%S) Update detected: $LOCAL_VER -> $REMOTE_VER"
 
-            cd "$EXT_PATH" && git pull
+            cd "$EXT_PATH" && git pull origin main
 
             # Update version.json with new version + pull timestamp
             echo "{\"version\":\"$REMOTE_VER\",\"lastPull\":$(date +%s)}" > "$EXT_PATH/version.json"

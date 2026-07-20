@@ -140,7 +140,7 @@ chmod +x watcher.sh && ./watcher.sh
 
 ### Manual
 ```bash
-git pull
+git pull origin main
 ```
 Then click **Reload** in the popup footer.
 

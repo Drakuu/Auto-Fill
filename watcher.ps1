@@ -23,7 +23,7 @@ while ($true) {
                 Write-Host "$(Get-Date -Format HH:mm:ss) Update detected: $($local.version) -> $($remote.version)" -ForegroundColor Yellow
                 
                 Set-Location -LiteralPath $extPath
-                git pull
+                git pull origin main
                 
                 # Update version.json with new version + pull timestamp
                 $newJson = @{ version = $remote.version; lastPull = (Get-Date -UFormat %s) } | ConvertTo-Json -Compress

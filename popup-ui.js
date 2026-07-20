@@ -440,7 +440,7 @@ document.getElementById("checkUpdateBtn").addEventListener("click", async () => 
   showStatus("Checking...");
   setTimeout(() => {
     chrome.storage.local.get(["updateAvailable", "lastCheck"], (r) => {
-      if (r.updateAvailable) showStatus("Update v" + r.updateAvailable + " available! Run git pull then Reload.", "warning");
+      if (r.updateAvailable) showStatus("Update v" + r.updateAvailable + " available! Run git pull origin main then Reload.", "warning");
       else showStatus("Up to date");
       showVersion();
     });

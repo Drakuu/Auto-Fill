@@ -8,12 +8,13 @@ async function checkUpdate() {
     const local = chrome.runtime.getManifest().version;
 
     // Check if watcher just pulled (lastPull written within last 6 min)
+    // If lastPull is recent, files were updated on disk — reload regardless of version comparison
     try {
       const localRes = await fetch(chrome.runtime.getURL("version.json") + "?t=" + Date.now());
       const localData = await localRes.json();
       if (localData.lastPull) {
         const age = Date.now() - parseInt(localData.lastPull) * 1000;
-        if (age < 360000 && localData.version === remote && remote !== local) {
+        if (age < 360000) {
           chrome.action.setBadgeText({ text: "" });
           chrome.storage.local.set({ updateAvailable: null });
           chrome.runtime.reload();

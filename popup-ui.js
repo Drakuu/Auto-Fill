@@ -31,6 +31,7 @@ async function loadFields() {
   document.getElementById("currentPage").textContent = getHostname(currentUrl);
   renderAll();
   autoLoadProfile();
+  refreshMacroSelect();
 }
 
 function renderAll() {
@@ -105,6 +106,36 @@ function renderAll() {
           btn.addEventListener("click", () => doFill(i));
           row.appendChild(input); row.appendChild(btn);
         }
+        card.dataset.fieldIndex = i;
+        card.addEventListener("mouseenter", function() {
+          var sel = f.name ? '[name="' + f.name.replace(/"/g, '\\"') + '"]' : f.id ? "#" + f.id : f.selector || "";
+          if (sel) {
+            var tid = setTimeout(function() {
+              chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
+                if (!tabs[0]?.id) return;
+                chrome.scripting.executeScript({
+                  target: { tabId: tabs[0].id },
+                  func: mainWorldHighlightField,
+                  args: [sel],
+                  world: "MAIN"
+                }).catch(function(){});
+              });
+            }, 150);
+            card._qfHoverTimer = tid;
+          }
+        });
+        card.addEventListener("mouseleave", function() {
+          if (card._qfHoverTimer) { clearTimeout(card._qfHoverTimer); delete card._qfHoverTimer; }
+          chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
+            if (!tabs[0]?.id) return;
+            chrome.scripting.executeScript({
+              target: { tabId: tabs[0].id },
+              func: mainWorldClearHighlight,
+              args: [],
+              world: "MAIN"
+            }).catch(function(){});
+          });
+        });
         card.appendChild(label); card.appendChild(info); card.appendChild(row);
         body.appendChild(card);
       });
@@ -217,6 +248,17 @@ document.getElementById("overlayToggle").addEventListener("click", toggleOverlay
 
 document.getElementById("exportFormBtn").addEventListener("click", exportFormData);
 
+document.getElementById("importDataBtn").addEventListener("click", function() {
+  document.getElementById("importDataInput").click();
+});
+
+document.getElementById("importDataInput").addEventListener("change", function(e) {
+  if (e.target.files && e.target.files[0]) {
+    importFormFile(e.target.files[0]);
+    e.target.value = "";
+  }
+});
+
 document.getElementById("batchHeader").addEventListener("click", function() {
   var body = document.getElementById("batchBody");
   var header = document.getElementById("batchHeader");
@@ -243,6 +285,16 @@ document.getElementById("clearTemplateBtn").addEventListener("click", async func
   showStatus("Template cleared");
 });
 
+document.getElementById("exportTemplateBtn").addEventListener("click", exportTemplate);
+
+document.getElementById("importTemplateFileBtn").addEventListener("click", function() {
+  document.getElementById("importTemplateInput").click();
+});
+
+document.getElementById("importTemplateInput").addEventListener("change", function(e) {
+  if (e.target.files && e.target.files[0]) { importTemplateFile(e.target.files[0]); e.target.value = ""; }
+});
+
 document.getElementById("batchFillBtn").addEventListener("click", async function() {
   var urlsText = document.getElementById("batchUrls").value;
   var urls = urlsText.split("\n").filter(function(u) { return u.trim(); });
@@ -251,6 +303,96 @@ document.getElementById("batchFillBtn").addEventListener("click", async function
   await batchFillUrls(urls);
   this.disabled = false;
 });
+
+document.getElementById("macroHeader").addEventListener("click", function() {
+  var body = document.getElementById("macroBody");
+  var header = document.getElementById("macroHeader");
+  body.style.display = body.style.display === "none" ? "block" : "none";
+  header.classList.toggle("open");
+});
+
+document.getElementById("recordMacroBtn").addEventListener("click", function() {
+  startRecording();
+  document.getElementById("recordMacroBtn").disabled = true;
+  document.getElementById("stopMacroBtn").disabled = false;
+  document.getElementById("playMacroBtn").disabled = true;
+  document.getElementById("macroStatusBadge").textContent = "🔴 Recording...";
+  document.getElementById("macroSteps").innerHTML = "";
+  showStatus("Recording started");
+});
+
+document.getElementById("stopMacroBtn").addEventListener("click", function() {
+  var steps = stopRecording();
+  document.getElementById("recordMacroBtn").disabled = false;
+  document.getElementById("stopMacroBtn").disabled = true;
+  document.getElementById("playMacroBtn").disabled = steps.length === 0;
+  document.getElementById("saveMacroBtn").disabled = steps.length === 0;
+  document.getElementById("macroStatusBadge").textContent = steps.length + " steps recorded";
+  updateMacroStepsUI();
+  showStatus("Recording stopped (" + steps.length + " steps)");
+});
+
+document.getElementById("playMacroBtn").addEventListener("click", async function() {
+  this.disabled = true;
+  await replayMacro(_macroSteps);
+  this.disabled = false;
+});
+
+document.getElementById("saveMacroBtn").addEventListener("click", async function() {
+  var name = document.getElementById("macroName").value.trim();
+  if (!name) { showStatus("Enter a macro name", "warning"); return; }
+  await saveMacro(name, _macroSteps);
+  document.getElementById("saveMacroBtn").disabled = true;
+  await refreshMacroSelect();
+  showStatus("Macro saved as '" + name + "'");
+});
+
+document.getElementById("deleteMacroBtn").addEventListener("click", async function() {
+  var name = document.getElementById("macroSelect").value;
+  if (!name) return;
+  await deleteMacro(name);
+  await refreshMacroSelect();
+  showStatus("Macro deleted");
+});
+
+document.getElementById("addStepBtn").addEventListener("click", function() {
+  var type = document.getElementById("addStepType").value;
+  var value = document.getElementById("addStepValue").value.trim();
+  if (type === "wait" && !value) value = "500";
+  if (type === "navigate" && !value) { showStatus("Enter a URL", "warning"); return; }
+  _macroSteps.push({ type: type, value: value, delay: 0 });
+  updateMacroStepsUI();
+  document.getElementById("addStepValue").value = "";
+  document.getElementById("playMacroBtn").disabled = false;
+  document.getElementById("saveMacroBtn").disabled = false;
+  document.getElementById("macroStatusBadge").textContent = _macroSteps.length + " steps";
+  showStatus("Added " + type + " step");
+});
+
+document.getElementById("macroSelect").addEventListener("change", async function() {
+  var name = this.value;
+  document.getElementById("deleteMacroBtn").disabled = !name;
+  if (!name) return;
+  var data = await loadMacro(name);
+  if (data) {
+    _macroSteps = data.steps || [];
+    updateMacroStepsUI();
+    document.getElementById("playMacroBtn").disabled = _macroSteps.length === 0;
+    document.getElementById("macroStatusBadge").textContent = _macroSteps.length + " steps";
+  }
+});
+
+async function refreshMacroSelect() {
+  var select = document.getElementById("macroSelect");
+  var names = await listMacros();
+  select.innerHTML = '<option value="">-- Saved macros --</option>';
+  names.forEach(function(n) {
+    var opt = document.createElement("option");
+    opt.value = n; opt.textContent = n;
+    select.appendChild(opt);
+  });
+  document.getElementById("deleteMacroBtn").disabled = true;
+}
 
 document.querySelectorAll(".tab").forEach(t => {
   t.addEventListener("click", () => switchTab(t.dataset.tab));
@@ -263,6 +405,12 @@ document.getElementById("searchBar").addEventListener("input", () => {
     const info = card.querySelector(".field-info")?.textContent?.toLowerCase() || "";
     card.style.display = label.includes(q) || info.includes(q) ? "" : "none";
   });
+});
+
+document.getElementById("seedInput").addEventListener("input", function() {
+  var v = this.value.trim();
+  if (v) { setSeed(v); showStatus("Seed set: " + v); }
+  else { setSeed(null); }
 });
 
 document.getElementById("refreshBtn").addEventListener("click", loadFields);

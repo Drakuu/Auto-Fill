@@ -1,64 +1,73 @@
 # Quick Fill — Chrome Extension
 
-Scan any webpage for form fields and buttons, fill them with custom or auto-generated data, and submit forms — all from a single popup. Built with Manifest V3.
+Scan any webpage for form fields and buttons, fill them with generated or imported data, and submit — all from a single popup. **29 features** built across 6 priority tiers. Manifest V3.
 
-## Features
+---
 
-### Core
-- **Instant field scan** — detects `<input>`, `<textarea>`, `<select>`, `<button>`, rich text editors, custom dropdowns (ARIA combobox), file uploads, and Shadow DOM/iframe fields
-- **55+ smart generators** — email, phone, password, credit card, SSN, passport, address, company, job title, lorem ipsum, and more
-- **Field constraints respected** — `maxLength`, `minLength`, `min`, `max`, `step` applied to all generated values
-- **Detection pipeline** — `autocomplete` attribute → HTML type → loose type → 55 label regex rules → text fallback
-- **Dark/light mode** — persisted to storage
+## Features at a Glance
 
-### Workflow
+### P0 — Core Reliability
 
-| Feature | What |
-|---------|------|
-| **Fill All** | Auto-generate and fill every field with one click |
-| **Fill & Submit** | Fill all fields + scored submit button finder |
-| **Multi-step forms** | Detect "Next"/"Continue" buttons, fill up to 10 wizard steps |
-| **Dialog/modal fill** | Click "Add/Create/Edit" buttons, wait for modal, fill, save |
-| **Conditional fields** | Re-scan after fill up to 5× for dynamically appearing fields |
-| **Undo fill** | Capture originals before fill, restore all fields in one click |
-| **Auto-repair** | Re-check fields 2s after fill — if JS re-rendered them empty, re-fill (3 retries) |
+| # | Feature | What |
+|---|---------|------|
+| 1 | **Validation detection** | Detects `aria-invalid`, `:invalid`, error elements 800ms after submit |
+| 2 | **Password confirm sync** | Copies password to confirm/verify/retype fields automatically |
+| 3 | **Dialog/modal fill** | Clicks Add/Create/Edit → waits for modal → fills → saves |
+| 4 | **Value retention** | Custom values survive Refresh — `_valueCache` restores on re-scan |
+| 5 | **File upload awareness** | File inputs shown with purple badge, safely skipped during auto-fill |
 
-### Intelligence
+### P1 — Workflow
 
-| Feature | What |
-|---------|------|
-| **Auto-learning** | Remembers values you type per domain → auto-suggests them next visit (📌 badge) |
-| **Password sync** | Copies password to confirm/verify/retype fields automatically |
-| **Smart profile matching** | Save/load by field `name` or `id` (not fragile index) — survives page changes |
-| **Fieldset grouping** | Fields grouped by `<fieldset>` legends, collapsible sections in popup |
+| # | Feature | What |
+|---|---------|------|
+| 6 | **Multi-step forms** | Finds Next/Continue → fills → proceeds up to 10 wizard steps |
+| 7 | **Post-submit state** | Checks success/error/confirmation after submit, reports result |
+| 8 | **Debug overlay** | Green/red/yellow field outlines + floating value labels on the page |
+| 9 | **Right-click menu** | "Fill all fields" / "Fill & Submit" without opening the popup |
+| 10 | **Undo fill** | Captures originals before fill, restores all fields in one click |
 
-### Post-Submit
+### P2 — Power User
 
-| Feature | What |
-|---------|------|
-| **Validation error detection** | Checks `aria-invalid`, `:invalid`, error elements 600ms after submit click |
-| **Confirmation auto-click** | Detects "Yes/OK/Confirm/Proceed" dialogs and clicks them |
-| **OTP/2FA detection** | Scans for one-time code fields after submit (autocomplete, inputmode, maxlength, label) |
-| **Export JSON** | Download all filled values as `domain-timestamp.json` |
+| # | Feature | What |
+|---|---------|------|
+| 11 | **Rich text support** | Detects Quill, Slate, ProseMirror, TinyMCE, `[contenteditable]` |
+| 12 | **Smart profiles** | Save/load by field `name` or `id` — survives page structure changes |
+| 13 | **Keyboard shortcuts** | Ctrl+Shift+F (fill), Ctrl+Shift+S (fill & submit) |
+| 14 | **Section grouping** | Fields grouped by `<fieldset>` legends, collapsible sections |
+| 15 | **Conditional fields** | Re-scans up to 5× for dynamically appearing fields after fill |
 
-### Access
+### P3 — Intelligence
 
-| Feature | What |
-|---------|------|
-| **Right-click context menu** | "Fill all fields" / "Fill & Submit" without opening popup |
-| **Keyboard shortcuts** | Ctrl+Shift+F (fill all), Ctrl+Shift+S (fill & submit) — customizable at `chrome://extensions/shortcuts` |
-| **Debug overlay** | Toggle green/red/yellow field outlines + floating value labels on the page |
+| # | Feature | What |
+|---|---------|------|
+| 16 | **Auto-learning** | Remembers typed values per domain, suggests them next visit (📌 badge) |
+| 17 | **Export JSON** | Download all filled values as `domain-timestamp.json` |
+| 18 | **OTP detection** | Scans for one-time code fields 1.5s after submit |
+| 19 | **Auto-repair** | Re-checks fields 2s after fill — re-fills if JS cleared them (3 retries) |
+| 20 | **Batch fill** | Save template → paste URLs → fill matching fields across tabs |
 
-### Batch
+### P4 — Automation
 
-| Feature | What |
-|---------|------|
-| **Batch fill** | Save current form as template, paste a list of URLs, fill all matching fields across tabs |
-| **Auto-fill on load** | Whitelist domains via toggle — auto-fills on page load |
+| # | Feature | What |
+|---|---------|------|
+| 21 | **Custom generators** | Define regex→generator rules in settings panel — no code changes |
+| 22 | **Import CSV/JSON** | Upload a file → values matched by field name/id/label → filled |
+| 23 | **Field hover highlight** | Hover a card → page scrolls to that field with orange outline |
+| 24 | **Macro recorder** | Record fill/click sequences with timing → save → replay |
 
-## Installation
+### P5-P6 — Specialized
 
-### From source
+| # | Feature | What |
+|---|---------|------|
+| 25 | **Profile sync** | `chrome.storage.sync` keeps profiles across Chrome devices (☁️) |
+| 26 | **Deterministic seed** | Same seed → same values every time (mulberry32 PRNG) |
+| 27 | **Template marketplace** | Export/Import templates as `.json` files — share with anyone |
+| 28 | **Workflow builder** | Drag-and-drop step reordering + wait/navigate/screenshot steps |
+| 29 | **Per-field undo** | ↩ button on each filled card — revert one field at a time |
+
+---
+
+## Quick Start
 
 ```bash
 git clone https://github.com/Drakuu/Auto-Fill.git
@@ -66,60 +75,15 @@ git clone https://github.com/Drakuu/Auto-Fill.git
 
 1. Open Chrome → `chrome://extensions`
 2. Enable **Developer mode**
-3. Click **Load Unpacked** → select the folder
+3. Click **Load Unpacked** → select the `form-filler-extension` folder
 4. Pin the extension in your toolbar
 
-### From Chrome Web Store
+### Keyboard shortcuts
+- `Ctrl+Shift+F` — Fill all fields
+- `Ctrl+Shift+S` — Fill & submit
+- Customize at `chrome://extensions/shortcuts`
 
-<!-- Add link after publishing -->
-
-## Auto-Update (Team Use)
-
-Run once, stays in background. Polls GitHub every 2 minutes, auto-pulls, auto-reloads.
-
-### Windows
-
-```powershell
-.\watcher.ps1
-```
-
-### Linux / Mac
-
-```bash
-chmod +x watcher.sh
-./watcher.sh
-```
-
-### Manual update
-
-```bash
-cd /path/to/Auto-Fill && git pull
-```
-
-Then click **Reload** button in the popup.
-
-## Project Structure
-
-```
-form-filler-extension/
-├── manifest.json              # v1.1.0, MV3, commands, contextMenus
-├── version.json               # {"version":"1.1.0"}
-├── background.js              # Service worker — updates, context menus, keyboard shortcuts, auto-fill
-├── content.js                 # Injected into pages — field/button scanning, rich text, fieldset grouping
-├── popup.html                 # Popup UI — loads 6 scripts
-├── popup-state.js             # State variables + utilities + learning + batch template
-├── popup-generators.js        # 55+ generators + detection tables + 55 label rules
-├── popup-main-world.js        # All mainWorld* functions (injected via executeScript)
-├── popup-fill.js              # Fill orchestration: sequencing, multi-step, dialog, undo, export, batch
-├── popup-profiles.js          # Profile save/load/delete/export/import
-├── popup-ui.js                # UI rendering, event listeners, theme, batch UI
-├── styles.css                 # Light/dark CSS custom properties
-├── icons/                     # icon16.png, icon48.png, icon128.png
-├── analysis.md                # Full priority matrix (P0-P4)
-├── README.md                  # This file
-├── watcher.ps1                # Windows auto-updater
-└── watcher.sh                 # Linux/Mac auto-updater
-```
+---
 
 ## Architecture
 
@@ -127,45 +91,83 @@ form-filler-extension/
 Popup ──executeScript({world:"MAIN"})──> Page (fill/clicks)
 Popup ──tabs.sendMessage ──> Content Script (field scanning)
 Content Script ──runtime.sendMessage ──> Background (auto-fill trigger)
-Background ──executeScript({world:"MAIN"}) ──> Page (auto-fill, context menu, keyboard shortcuts)
+Background ──executeScript({world:"MAIN"}) ──> Page (auto-fill, shortcuts, context menu)
 ```
 
-- **No `inject.js`, no `web_accessible_resources`, no hidden div bridge.** Fill logic serializes functions and runs them directly in the page's MAIN world via `chrome.scripting.executeScript`. CSP-safe.
-- Content script is isolated from page JS — only handles ping + getFormFields (recursive DOM scan).
+- **No inject.js, no web_accessible_resources.** Fill logic runs via `chrome.scripting.executeScript({ world: "MAIN" })` — CSP-safe.
+- Content script is isolated from page JS — handles only `ping` + `getFormFields` (recursive DOM scan with Shadow DOM + same-origin iframe support).
 
-## Development
+---
 
+## Project Structure
+
+```
+form-filler-extension/
+├── manifest.json              # v1.2.0, MV3
+├── version.json               # {"version":"1.2.0"}
+├── background.js              # Service worker — updates, context menus, shortcuts
+├── content.js                 # Content script — field/button scanning
+├── popup.html                 # Popup UI — loads 7 scripts
+├── popup-state.js             # State, sendMsg, execInMainWorld, learning, batch, macros
+├── popup-generators.js        # 55+ generators, detection pipeline, customDetect, seed PRNG
+├── popup-main-world.js        # All mainWorld* functions (injected into page)
+├── popup-fill.js              # Fill orchestration, import, export, replay, repair, diff
+├── popup-profiles.js          # Profile CRUD + export/import
+├── popup-settings.js          # Custom generator rules settings panel
+├── popup-ui.js                # UI rendering, event listeners, init
+├── styles.css                 # Light/dark CSS custom properties
+├── icons/                     # icon16.png, icon48.png, icon128.png
+├── watcher.ps1                # Windows auto-updater
+├── watcher.sh                 # Linux/Mac auto-updater
+└── analysis.md                # Full priority matrix (all 29 features)
+```
+
+---
+
+## Auto-Update (Team Use)
+
+Polls GitHub every 2 minutes. Auto-pulls, auto-reloads.
+
+### Windows
+```powershell
+.\watcher.ps1
+```
+
+### Linux / Mac
 ```bash
-# Bump version
-#   manifest.json: "version": "1.X.X"
-#   version.json:  {"version":"1.X.X"}
-git add . && git commit -m "v1.X.X" && git push
+chmod +x watcher.sh && ./watcher.sh
 ```
 
-### Reload
-- `chrome://extensions` → Reload, or click **Reload** in the popup
+### Manual
+```bash
+git pull
+```
+Then click **Reload** in the popup footer.
 
-### View logs
-- Popup: Right-click popup → Inspect
-- Background: `chrome://extensions` → Service Worker link
-- Content script: Right-click page → Inspect → Console
+---
 
 ## Permissions
 
-| Permission | Reason |
-|-----------|--------|
-| `storage` | Profiles, auto-fill domains, learning data, theme, batch templates |
-| `activeTab` | Access current tab's content |
+| Permission | Why |
+|-----------|-----|
+| `storage` | Profiles, learning, templates, theme, custom rules |
+| `activeTab` | Access the current page |
 | `scripting` | Execute fill logic in page context (`world: "MAIN"`) |
-| `alarms` | Periodic GitHub update checks |
-| `contextMenus` | Right-click → Fill all fields / Fill & Submit |
+| `alarms` | Periodic update checks |
+| `contextMenus` | Right-click menu items |
+
+---
 
 ## Known Limitations
 
-- **Closed Shadow DOM** (`mode: "closed"`) — `shadowRoot` is `null`, fields inside are invisible
-- **Cross-origin iframes** — Blocked by browser security; only same-origin iframes scanned
-- **React onChange** — Some React 18+ synthetic event handlers may not catch the native dispatch chain
-- **Batch fill** — Creates and closes background tabs; some sites may detect this as automation
+| Limitation | Why |
+|-----------|-----|
+| Closed Shadow DOM | `shadowRoot` is `null` — fields inside are invisible |
+| Cross-origin iframes | Blocked by browser security policy |
+| React synthetic events | Some React 18+ handlers may miss the native dispatch chain |
+| Batch fill automation | Some sites detect background tab automation |
+
+---
 
 ## License
 

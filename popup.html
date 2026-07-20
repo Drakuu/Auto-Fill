@@ -12,6 +12,13 @@
     <div class="header">
       <h1>Quick Fill</h1>
       <div class="header-actions">
+        <button id="settingsBtn" class="icon-btn" title="Custom generator rules">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
         <button id="themeToggle" class="icon-btn" title="Toggle dark mode">
           <svg id="themeIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -65,13 +72,20 @@
           <option value="dispatch">Dispatch event</option>
         </select>
       </label>
+      <label class="opt-label" title="Same seed = same generated values">
+        Seed:
+        <input type="text" id="seedInput" class="opt-input" placeholder="(optional)" style="width:60px">
+      </label>
       <label class="opt-label">
         <input type="checkbox" id="autoFillToggle"> Auto-fill on load
       </label>
       <button id="overlayToggle" class="opt-btn">Show on page</button>
     </div>
 
-    <div class="profile-section">
+    <div class="profile-section" style="border-bottom:1px solid var(--border-light);padding-bottom:6px;margin-bottom:6px">
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">
+        Profiles <span title="Synced across Chrome devices via your Google account">☁️</span>
+      </div>
       <div class="profile-row">
         <input id="profileName" class="profile-input" type="text" value="Default" placeholder="Profile name">
         <button id="saveProfileBtn" class="profile-btn">Save</button>
@@ -87,9 +101,12 @@
         <button id="exportProfilesBtn" class="profile-btn">Export All</button>
         <button id="importProfilesBtn" class="profile-btn">Import</button>
         <button id="exportFormBtn" class="profile-btn">Export JSON</button>
+        <button id="importDataBtn" class="profile-btn">Import</button>
       </div>
     </div>
     <input id="importFileInput" type="file" accept=".json" style="display:none">
+    <input id="importDataInput" type="file" accept=".json,.csv" style="display:none">
+    <input id="importTemplateInput" type="file" accept=".json" style="display:none">
 
     <div class="batch-section" style="margin-top:6px">
       <div class="batch-header" id="batchHeader">
@@ -99,11 +116,70 @@
       <div class="batch-body" id="batchBody" style="display:none">
         <div class="batch-row">
           <button id="saveTemplateBtn" class="opt-btn">Save Template</button>
+          <button id="exportTemplateBtn" class="opt-btn">Export</button>
+          <button id="importTemplateFileBtn" class="opt-btn">Import</button>
           <button id="clearTemplateBtn" class="opt-btn" disabled>Clear</button>
           <span id="templateStatus" class="template-status" style="font-size:10px;color:var(--text-dim)">No template</span>
         </div>
         <textarea id="batchUrls" class="batch-textarea" placeholder="Paste URLs (one per line)..." style="width:100%;min-height:50px;margin:4px 0;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:11px;background:var(--bg-input);color:var(--text);font-family:inherit;resize:vertical"></textarea>
         <button id="batchFillBtn" class="profile-btn" style="width:100%" disabled>Start Batch Fill</button>
+      </div>
+    </div>
+
+    <div class="batch-section" style="margin-top:4px">
+      <div class="batch-header" id="macroHeader">
+        <span class="batch-arrow">▸</span>
+        <span class="batch-title">Macro Recorder</span>
+        <span id="macroStatusBadge" class="template-status" style="margin-left:auto;font-size:10px;color:var(--text-dim)">Idle</span>
+      </div>
+      <div class="batch-body" id="macroBody" style="display:none;padding:6px 4px">
+        <div class="batch-row" style="gap:4px;margin-bottom:4px">
+          <button id="recordMacroBtn" class="opt-btn" style="flex:1;background:var(--red);color:#fff;border-color:var(--red)">🔴 Record</button>
+          <button id="stopMacroBtn" class="opt-btn" style="flex:1" disabled>⏹ Stop</button>
+          <button id="playMacroBtn" class="opt-btn" style="flex:1" disabled>▶ Play</button>
+        </div>
+        <div class="batch-row" style="gap:4px;margin-bottom:4px">
+          <input id="macroName" class="settings-input" type="text" placeholder="Macro name..." style="flex:1">
+          <button id="saveMacroBtn" class="opt-btn" disabled>💾 Save</button>
+          <select id="macroSelect" class="settings-select" style="flex:1">
+            <option value="">-- Saved macros --</option>
+          </select>
+          <button id="deleteMacroBtn" class="opt-btn danger" disabled>✕</button>
+        </div>
+        <div class="batch-row" style="gap:4px;margin-bottom:4px">
+          <select id="addStepType" class="settings-select" style="flex:1">
+            <option value="wait">Wait (delay)</option>
+            <option value="navigate">Navigate to URL</option>
+            <option value="screenshot">Screenshot</option>
+          </select>
+          <input id="addStepValue" class="settings-input" type="text" placeholder="ms or URL..." style="flex:2">
+          <button id="addStepBtn" class="opt-btn">+</button>
+        </div>
+        <div id="macroSteps" style="font-size:10px;color:var(--text-dim);max-height:120px;overflow-y:auto;padding:4px 0"></div>
+      </div>
+    </div>
+
+    <div id="settingsOverlay" class="settings-overlay" style="display:none">
+      <div class="settings-panel">
+        <div class="settings-header">
+          <span class="settings-title">Custom Generator Rules</span>
+          <button id="settingsCloseBtn" class="icon-btn" title="Close">✕</button>
+        </div>
+        <p class="settings-hint">Add regex rules to override field detection. Custom rules are checked before all built-in detectors.</p>
+        <div class="settings-list" id="settingsList"></div>
+        <div class="settings-add-row">
+          <input id="rulePattern" class="settings-input" type="text" placeholder="Regex pattern (e.g. employee.?id)">
+          <select id="ruleType" class="settings-select">
+            <option value="generator">Generator</option>
+            <option value="fixed">Fixed text</option>
+            <option value="options">Random option</option>
+          </select>
+          <input id="ruleValue" class="settings-input" type="text" placeholder="Generator name or value">
+        </div>
+        <div class="settings-footer">
+          <button id="addRuleBtn" class="profile-btn">Add Rule</button>
+          <button id="clearRulesBtn" class="profile-btn danger">Clear All</button>
+        </div>
       </div>
     </div>
 
@@ -131,6 +207,7 @@
   <script src="popup-main-world.js"></script>
   <script src="popup-fill.js"></script>
   <script src="popup-profiles.js"></script>
+  <script src="popup-settings.js"></script>
   <script src="popup-ui.js"></script>
 </body>
 

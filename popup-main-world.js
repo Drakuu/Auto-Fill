@@ -272,6 +272,47 @@ function mainWorldHideOverlay() {
   } catch(e) { return false; }
 }
 
+function mainWorldHighlightField(selector) {
+  mainWorldClearHighlight();
+  var el;
+  if (selector.startsWith("#")) el = document.getElementById(selector.slice(1));
+  else if (selector.startsWith(".")) el = document.querySelector(selector);
+  else el = document.querySelector('[name="' + selector.replace(/"/g, '\\"') + '"], #' + selector.replace(/"/g, '\\"') + ', [data-field-index="' + selector + '"]');
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  el.style.outline = "2px solid #e88a3a";
+  el.style.outlineOffset = "2px";
+  el.dataset.qfHighlight = "true";
+}
+
+function mainWorldClearHighlight() {
+  document.querySelectorAll("[data-qf-highlight]").forEach(function(el) {
+    el.style.outline = "";
+    el.style.outlineOffset = "";
+    delete el.dataset.qfHighlight;
+  });
+}
+
+function mainWorldRestoreSingleField(original) {
+  var el = document.querySelectorAll("input, textarea, select, [contenteditable=true], [role=combobox]")[original.index];
+  if (!el) return;
+  var tag = el.tagName.toLowerCase();
+  if (tag === "input" && el.type === "checkbox") { el.checked = original.checked; }
+  else if (tag === "input" || tag === "textarea") {
+    var setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set || Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    if (setter) { setter.call(el, original.value); }
+    else { el.value = original.value; }
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  } else if (tag === "select") {
+    el.value = original.value;
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  } else if (el.isContentEditable) {
+    el.innerHTML = original.value;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+}
+
 function mainWorldCaptureOriginals() {
   try {
     var data = [];

@@ -135,3 +135,61 @@ async function clearBatchTemplate() {
   await chrome.storage.local.remove(key);
   _batchTemplate = null;
 }
+
+var _isRecording = false;
+var _macroSteps = [];
+var _macroStartTime = 0;
+
+function getMacroKey(name) { return "macro_" + name; }
+
+async function saveMacro(name, steps) {
+  var key = getMacroKey(name);
+  var all = await listMacros();
+  if (all.indexOf(name) === -1) all.push(name);
+  await chrome.storage.sync.set({ ["_macroNames"]: all, [key]: { name: name, steps: steps, savedAt: Date.now() } });
+}
+
+async function loadMacro(name) {
+  var key = getMacroKey(name);
+  var res = await chrome.storage.sync.get([key]);
+  return res[key] || null;
+}
+
+async function listMacros() {
+  var res = await chrome.storage.sync.get(["_macroNames"]);
+  return res["_macroNames"] || [];
+}
+
+async function deleteMacro(name) {
+  var key = getMacroKey(name);
+  var all = await listMacros();
+  all = all.filter(function(n) { return n !== name; });
+  await chrome.storage.sync.set({ ["_macroNames"]: all });
+  await chrome.storage.sync.remove(key);
+}
+
+function startRecording() {
+  _isRecording = true;
+  _macroSteps = [];
+  _macroStartTime = Date.now();
+}
+
+function stopRecording() {
+  _isRecording = false;
+  return _macroSteps;
+}
+
+function addMacroStep(type, fieldIndex, buttonIndex, fieldName, fieldSelector) {
+  if (!_isRecording) return;
+  var delay = _macroSteps.length === 0 ? 0 : Date.now() - _macroStartTime;
+  _macroStartTime = Date.now();
+  _macroSteps.push({
+    type: type,
+    fieldIndex: fieldIndex,
+    buttonIndex: buttonIndex,
+    fieldName: fieldName || "",
+    fieldSelector: fieldSelector || "",
+    delay: delay,
+    timestamp: Date.now()
+  });
+}

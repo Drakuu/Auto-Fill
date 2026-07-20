@@ -1,18 +1,42 @@
-function randFrom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
-function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+var _seedValue = null;
+var _randState = null;
+
+function setSeed(seed) {
+  if (seed === null || seed === undefined || seed === "") {
+    _seedValue = null;
+    _randState = null;
+    return;
+  }
+  _seedValue = String(seed);
+  var h = 0;
+  for (var i = 0; i < _seedValue.length; i++) { h = ((h << 5) - h) + _seedValue.charCodeAt(i); h |= 0; }
+  _randState = h >>> 0;
+}
+
+function _rand() {
+  if (_randState === null) return Math.random();
+  _randState |= 0;
+  _randState = _randState + 0x6D2B79F5 | 0;
+  var t = Math.imul(_randState ^ _randState >>> 15, 1 | _randState);
+  t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+  return ((t ^ t >>> 14) >>> 0) / 4294967296;
+}
+
+function randFrom(arr) { return arr[Math.floor(_rand() * arr.length)]; }
+function randInt(min, max) { return Math.floor(_rand() * (max - min + 1)) + min; }
 function pad(n, w) { return String(n).padStart(w, "0"); }
 
 function genFirst() {
   const s = ["J","A","M","S","D","C","R","T","E","K","N","L","B","H","P","V","W","G","Z","O"];
   const m = ["a","o","e","i","u","an","en","in","on","ar","or","el","al","am","em","ad","ed","av","ev","as","es","is","at","et","it","ac","ic","ol","il","ak","ek","ik","ap","ep","ip"];
   const e = ["n","s","d","t","h","nn","ss","tt","ck","rk","th","nd","ld","rd","st","nt","rt","ll","mm","rl","rn","ry","ro"];
-  return randFrom(s) + randFrom(m) + (Math.random() > 0.45 ? randFrom(m) : "") + randFrom(e);
+  return randFrom(s) + randFrom(m) + (_rand() > 0.45 ? randFrom(m) : "") + randFrom(e);
 }
 function genLast() {
   const s = ["S","M","W","B","J","H","C","R","A","D","T","G","K","L","P","F","E","N","V","O"];
   const m = ["i","o","a","e","u","ar","er","or","al","el","il","am","em","im","an","en","in","on","un","ow","aw","ay","ey","le","so","to","man","for","land","wood","field","well","hill","ham","b","l","f","m","p","r","s","t","k","d","g","w","n","y"];
   const e = ["s","n","r","d","t","l","k","e","y","son","ton","man","er","ley","ett","sen","ham","berg","burg","stein","shire","field","ford","wood","well","hill","land","ward","lyn","ers","ick","art","ark","ink","ers","son","ton","man","ley","ett","sen","ham","by"];
-  return randFrom(s) + randFrom(m) + (Math.random() > 0.3 ? randFrom(e) : "");
+  return randFrom(s) + randFrom(m) + (_rand() > 0.3 ? randFrom(e) : "");
 }
 function genEmail() { return genFirst().toLowerCase() + "." + genLast().toLowerCase() + randInt(10, 999) + randFrom(["@gmail.com","@yahoo.com","@outlook.com","@icloud.com","@proton.me","@example.com"]); }
 function genPhone() { return "555-" + pad(randInt(100, 999), 3) + "-" + pad(randInt(1000, 9999), 4); }
@@ -23,7 +47,7 @@ function genStreet() { return randInt(100, 9999) + " " + randFrom(["Main St","Oa
 function genZip() { return pad(randInt(10000, 99999), 5); }
 function genPassword() { return genFirst().toLowerCase() + genLast().toLowerCase() + randInt(10, 999) + randFrom(["!","@","#","$"]); }
 function genCompany() { return randFrom(["Acme","Globex","Initech","Umbrella","Stark","Wayne","Cyberdyne","Hooli","Dunder","Oscorp","Soylent","Wonka","Aperture","Tyrell","Massive","Nimbus","Gekko","Sterling","Vandelay","Prestige"]) + " " + randFrom(["Corp","Inc","LLC","Industries","Technologies","Group","Labs","Systems","Media","Ventures","Global","Solutions","Dynamics","Works","Enterprises"]); }
-function genJob() { return randFrom(["Senior","Lead","Principal","Staff","Junior","",""]) + (Math.random() > 0.3 ? " " : "") + randFrom(["Software Engineer","Product Manager","Data Analyst","UX Designer","DevOps Engineer","QA Tester","Technical Writer","Solutions Architect","Security Analyst","ML Engineer","Full Stack Developer","Frontend Developer","Backend Developer","Engineering Manager","Product Designer","Scrum Master","Business Analyst","Marketing Manager","Sales Associate","Accountant","HR Coordinator","Consultant","Operations Manager","Creative Director","Research Scientist","Systems Admin","Network Engineer","Support Specialist","Data Scientist","Cloud Architect"]); }
+function genJob() { return randFrom(["Senior","Lead","Principal","Staff","Junior","",""]) + (_rand() > 0.3 ? " " : "") + randFrom(["Software Engineer","Product Manager","Data Analyst","UX Designer","DevOps Engineer","QA Tester","Technical Writer","Solutions Architect","Security Analyst","ML Engineer","Full Stack Developer","Frontend Developer","Backend Developer","Engineering Manager","Product Designer","Scrum Master","Business Analyst","Marketing Manager","Sales Associate","Accountant","HR Coordinator","Consultant","Operations Manager","Creative Director","Research Scientist","Systems Admin","Network Engineer","Support Specialist","Data Scientist","Cloud Architect"]); }
 function genUrl() { return "https://" + genFirst().toLowerCase() + randFrom(["com","net","io","org","co","app"]); }
 function genDate() { return "199" + randInt(0, 9) + "-" + pad(randInt(1, 12), 2) + "-" + pad(randInt(1, 28), 2); }
 function genLorem() { return "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."; }
@@ -113,6 +137,25 @@ const labelRules = [
   [/phone|telephone|mobile|cell|contact/, "phone"],
 ];
 
+var customRulesCache = null;
+
+const customDetect = (f) => {
+  if (!customRulesCache || customRulesCache.length === 0) return null;
+  const l = ((f.label||"") + " " + (f.name||"") + " " + (f.id||"") + " " + (f.placeholder||"") + " " + (f.autocomplete||"")).toLowerCase();
+  for (const rule of customRulesCache) {
+    try {
+      const re = new RegExp(rule.pattern, "i");
+      if (re.test(l)) {
+        if (rule.type === "generator") return generators[rule.value] ? rule.value : null;
+        if (rule.type === "fixed") return "__fixed__" + rule.value;
+        if (rule.type === "options") return "__options__" + rule.value;
+        return rule.value;
+      }
+    } catch(e) {}
+  }
+  return null;
+};
+
 const acDetect = (f) => acMap[(f.autocomplete || "").toLowerCase()] || null;
 const typeStrict = (f) => typeStrictMap[f.type || ""] || null;
 const typeLoose = (f) => { if (f.tag === "textarea") return "lorem"; return typeLooseMap[f.type || ""] || null; };
@@ -122,7 +165,7 @@ const labelDetect = (f) => {
   return null;
 };
 
-const detectors = [acDetect, typeStrict, typeLoose, labelDetect];
+const detectors = [customDetect, acDetect, typeStrict, typeLoose, labelDetect];
 
 const generators = {
   "first":   () => genFirst(),
@@ -143,7 +186,7 @@ const generators = {
   "time":    () => pad(randInt(8, 19), 2) + ":" + pad(randInt(0, 3) * 15, 2),
   "datetime":() => "2026-" + pad(randInt(1, 12), 2) + "-" + pad(randInt(1, 28), 2) + "T" + pad(randInt(8, 19), 2) + ":00",
   "week":    () => "2026-W" + pad(randInt(1, 52), 2),
-  "color":   () => "#" + Math.floor(Math.random() * 16777215).toString(16).padStart(6, "0"),
+  "color":   () => "#" + Math.floor(_rand() * 16777215).toString(16).padStart(6, "0"),
   "number":  (f) => String(randInt(Number(f && f.min) || 1, Number(f && f.max) || 9999)),
   "gender":  () => randFrom(["Male", "Female", "Other"]),
   "company": () => genCompany(),
@@ -163,7 +206,7 @@ const generators = {
   "ccexp":   () => pad(randInt(1, 12), 2) + "/" + (new Date().getFullYear() + randInt(1, 5)),
   "cctype":  () => randFrom(["Visa", "MasterCard", "AmEx", "Discover"]),
   "currency":() => "USD",
-  "amount":  () => (Math.random() * 500 + 10).toFixed(2),
+  "amount":  () => (_rand() * 500 + 10).toFixed(2),
   "otp":     () => pad(randInt(100000, 999999), 6),
   "lang":    () => "English",
   "options": (f) => randFrom(f.options),
@@ -214,7 +257,15 @@ function generateRandomValue(field) {
   if (field.options && field.options.length > 0) return applyConstraints(randFrom(field.options), field);
   for (const detect of detectors) {
     const key = detect(field);
-    if (key && generators[key]) return applyConstraints(generators[key](field), field);
+    if (key) {
+      if (key.startsWith("__fixed__")) return key.slice(9);
+      if (key.startsWith("__options__")) {
+        var parts = key.slice(11).split("|").map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; });
+        return parts.length > 0 ? applyConstraints(randFrom(parts), field) : "";
+      }
+      if (generators[key]) return applyConstraints(generators[key](field), field);
+      return key;
+    }
   }
   return applyConstraints(generators["text"](field), field);
 }

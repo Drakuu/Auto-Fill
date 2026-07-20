@@ -107,6 +107,11 @@ async function doFill(idx) {
   if (f.type === "file") { showStatus("Cannot auto-fill file inputs", "warning"); return; }
   const res = await execInMainWorld("fill", [{ selector: f.selector, index: f.index, value: f.fillValue || "", isCustomSelect: f.isCustomSelect, hiddenSelectSelector: f.hiddenSelectSelector, isRichText: f.type === "richtext" }]);
   if (res?.success) markFilled(idx);
+  if (_isRecording) {
+    var sel = f.name ? '[name="' + f.name.replace(/"/g, '\\"') + '"]' : f.id ? "#" + f.id : f.selector || "";
+    addMacroStep("fill", idx, undefined, f.name || f.id || "", sel);
+    updateMacroStepsUI();
+  }
   showStatus("Filled!");
 }
 
@@ -121,6 +126,60 @@ function markFilled(idx) {
     return b;
   })();
   badge.textContent = "✓";
+  if (!card.querySelector(".undo-single")) {
+    var undoBtn = document.createElement("button");
+    undoBtn.className = "undo-single";
+    undoBtn.textContent = "↩";
+    undoBtn.title = "Undo this field";
+    undoBtn.addEventListener("click", function(e) { e.stopPropagation(); undoSingleField(idx); });
+    card.querySelector(".input-row").appendChild(undoBtn);
+  }
+}
+
+async function undoSingleField(idx) {
+  var f = fields[idx];
+  if (!f) return;
+  var original = _undoData.find(function(d) { return d.index === f.index; });
+  if (!original) { showStatus("No original value for this field", "warning"); return; }
+  var [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) return;
+  await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: mainWorldRestoreSingleField,
+    args: [original],
+    world: "MAIN"
+  });
+  f.fillValue = original.value || "";
+  var cards = document.querySelectorAll(".field-card");
+  var card = cards[idx];
+  if (card) {
+    card.classList.remove("filled");
+    var badge = card.querySelector(".filled-badge");
+    if (badge) badge.remove();
+    var ub = card.querySelector(".undo-single");
+    if (ub) ub.remove();
+    var input = card.querySelector(".field-value");
+    if (input) input.value = original.value || "";
+  }
+  var changed = countChanged();
+  showStatus("Field reverted (" + changed.changed + " field(s) remain changed)");
+}
+
+function countChanged() {
+  var changed = 0;
+  var unchanged = 0;
+  fields.forEach(function(f, i) {
+    var orig = _undoData.find(function(d) { return d.index === f.index; });
+    if (orig && orig.value !== f.fillValue) changed++;
+    else unchanged++;
+  });
+  return { changed: changed, total: fields.length };
+}
+
+function showDiffSummary() {
+  if (_undoData.length === 0) return;
+  var c = countChanged();
+  if (c.changed > 0) showStatus(c.changed + " of " + c.total + " field(s) changed (↩ to undo one)");
 }
 
 function matchSelectValue(value, options, optionTexts) {
@@ -331,6 +390,148 @@ function exportFormData() {
   showStatus("Exported!");
 }
 
+function importFormFile(file) {
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var text = e.target.result;
+    var ext = file.name.split(".").pop().toLowerCase();
+    var data;
+    if (ext === "csv") {
+      data = parseCSV(text);
+    } else {
+      try { data = JSON.parse(text); } catch(err) { showStatus("Invalid JSON: " + err.message, "error"); return; }
+      if (Array.isArray(data)) {
+        if (data.length > 0 && data[0].name && data[0].value !== undefined) {
+          var obj = {};
+          data.forEach(function(item) { if (item.name) obj[item.name.toLowerCase()] = item.value; });
+          data = obj;
+        } else if (data.length > 0 && data[0].label && data[0].value !== undefined) {
+          var obj = {};
+          data.forEach(function(item) { if (item.label) obj[item.label.toLowerCase()] = item.value; });
+          data = obj;
+        } else {
+          data = {};
+        }
+      } else if (data.fields && Array.isArray(data.fields)) {
+        var obj = {};
+        data.fields.forEach(function(f) {
+          if (f.name) obj[f.name.toLowerCase()] = f.value;
+          if (f.label) obj[f.label.toLowerCase()] = f.value;
+        });
+        data = obj;
+      } else if (typeof data === "object" && data !== null) {
+        var obj = {};
+        Object.keys(data).forEach(function(k) { obj[k.toLowerCase()] = data[k]; });
+        data = obj;
+      } else {
+        showStatus("Unrecognized JSON format", "error"); return;
+      }
+    }
+    applyImportedData(data);
+  };
+  reader.readAsText(file);
+}
+
+function parseCSV(text) {
+  var lines = text.split("\n").filter(function(l) { return l.trim().length > 0; });
+  if (lines.length < 2) { showStatus("CSV needs header + data rows", "error"); return {}; }
+  var headers = lines[0].split(",").map(function(h) { return h.trim().toLowerCase().replace(/^"|"$/g, ""); });
+  var result = {};
+  for (var r = 1; r < lines.length; r++) {
+    var vals = parseCSVLine(lines[r]);
+    headers.forEach(function(h, i) {
+      if (vals[i] && vals[i].trim()) {
+        if (!result[h]) result[h] = vals[i].trim();
+      }
+    });
+  }
+  return result;
+}
+
+function parseCSVLine(line) {
+  var result = [];
+  var current = "";
+  var inQuotes = false;
+  for (var i = 0; i < line.length; i++) {
+    var c = line[i];
+    if (c === '"') {
+      if (inQuotes && i + 1 < line.length && line[i + 1] === '"') { current += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if (c === "," && !inQuotes) {
+      result.push(current);
+      current = "";
+    } else {
+      current += c;
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+function applyImportedData(data) {
+  if (!data || Object.keys(data).length === 0) { showStatus("No data to import", "warning"); return; }
+  var matched = 0;
+  fields.forEach(function(f) {
+    var keysToTry = [
+      (f.name || "").toLowerCase(),
+      (f.id || "").toLowerCase(),
+      (f.label || "").toLowerCase(),
+      (f.placeholder || "").toLowerCase()
+    ].filter(function(k) { return k.length > 0; });
+    for (var ki = 0; ki < keysToTry.length; ki++) {
+      var k = keysToTry[ki];
+      if (data[k] !== undefined && data[k] !== null && data[k] !== "") {
+        f.fillValue = data[k];
+        matched++;
+        return;
+      }
+    }
+  });
+  document.querySelectorAll(".field-value").forEach(function(el, i) {
+    if (fields[i]) el.value = fields[i].fillValue || "";
+  });
+  if (matched > 0) {
+    showStatus("Imported " + matched + " field(s) from file");
+  } else {
+    showStatus("No matching fields found in import", "warning");
+  }
+}
+
+function exportTemplate() {
+  var template = _batchTemplate;
+  if (!template || template.fields.length === 0) { showStatus("Save a template first", "warning"); return; }
+  var json = JSON.stringify(template, null, 2);
+  var blob = new Blob([json], { type: "application/json" });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = "quick-fill-template-" + Date.now() + ".json";
+  a.click();
+  URL.revokeObjectURL(url);
+  showStatus("Template exported");
+}
+
+function importTemplateFile(file) {
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var data = JSON.parse(e.target.result);
+      if (!data.fields || !Array.isArray(data.fields)) { showStatus("Invalid template format", "error"); return; }
+      var key = getBatchTemplateKey();
+      data.timestamp = Date.now();
+      chrome.storage.local.set({ [key]: data }, function() {
+        _batchTemplate = data;
+        document.getElementById("templateStatus").textContent = "Template: " + data.fields.length + " fields" + (data.urls?.length ? ", " + data.urls.length + " URLs" : "");
+        document.getElementById("clearTemplateBtn").disabled = false;
+        document.getElementById("batchFillBtn").disabled = false;
+        if (data.urls) document.getElementById("batchUrls").value = data.urls.join("\n");
+        showStatus("Template imported (" + data.fields.length + " fields)");
+      });
+    } catch(err) { showStatus("Invalid JSON: " + err.message, "error"); }
+  };
+  reader.readAsText(file);
+}
+
 async function batchFillUrls(urls) {
   if (!urls || urls.length === 0) { showStatus("No URLs provided", "warning"); return; }
   var template = await saveBatchTemplate();
@@ -421,6 +622,7 @@ async function fillAll() {
   var statusMsg = count + " field" + (count !== 1 ? "s" : "") + " filled";
   if (repaired > 0) statusMsg += " (" + repaired + " auto-repaired)";
   showStatus(statusMsg);
+  showDiffSummary();
 }
 
 async function fillMultiStep() {
@@ -518,6 +720,10 @@ async function clearAll() {
 async function doClick(idx) {
   const b = buttons[idx];
   await execInMainWorld("click", { selector: b.selector, index: b.index });
+  if (_isRecording) {
+    addMacroStep("click", undefined, idx, b.label || "", b.selector || "");
+    updateMacroStepsUI();
+  }
   showStatus("Clicked!");
 }
 
@@ -525,5 +731,112 @@ async function doFillClick(idx) {
   const count = await fillWithSequencing();
   const b = buttons[idx];
   await execInMainWorld("click", { selector: b.selector, index: b.index });
+  if (_isRecording) {
+    addMacroStep("click", undefined, idx, b.label || "", b.selector || "");
+    updateMacroStepsUI();
+  }
   showStatus("Done!");
+}
+
+function renderMacroStep(s, i) {
+  var label = s.type;
+  if (s.type === "fill") label += " → " + (s.fieldName || s.fieldSelector || "field " + s.fieldIndex);
+  else if (s.type === "click") label += " → " + (s.fieldName || "button " + (s.buttonIndex !== undefined ? s.buttonIndex + 1 : ""));
+  else if (s.type === "wait") label += " → " + (s.value || s.delay || "500") + "ms";
+  else if (s.type === "navigate") label += " → " + (s.value || s.fieldSelector || "");
+  else if (s.type === "screenshot") label += "";
+  var delayStr = i > 0 ? " (+" + s.delay + "ms)" : "";
+  return '<div class="macro-step" draggable="true" data-idx="' + i + '">' +
+    '<span class="macro-drag">⠿</span>' +
+    '<span class="macro-num">' + (i + 1) + '.</span> ' +
+    '<span class="macro-label">' + label + '</span>' +
+    '<span class="macro-delay">' + delayStr + '</span>' +
+    '<span class="macro-remove" data-idx="' + i + '">✕</span>' +
+    '</div>';
+}
+
+function updateMacroStepsUI() {
+  var el = document.getElementById("macroSteps");
+  if (!el) return;
+  if (_macroSteps.length === 0) {
+    el.innerHTML = '<div style="color:var(--text-dim);padding:4px 0;text-align:center">No steps. Record fill/click actions or add steps below.</div>';
+    return;
+  }
+  el.innerHTML = _macroSteps.map(function(s, i) { return renderMacroStep(s, i); }).join("");
+  el.querySelectorAll(".macro-remove").forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      var idx = parseInt(this.dataset.idx);
+      _macroSteps.splice(idx, 1);
+      updateMacroStepsUI();
+      if (!_isRecording) {
+        document.getElementById("playMacroBtn").disabled = _macroSteps.length === 0;
+        document.getElementById("saveMacroBtn").disabled = _macroSteps.length === 0;
+        document.getElementById("macroStatusBadge").textContent = _macroSteps.length + " steps";
+      }
+    });
+  });
+  el.querySelectorAll(".macro-step").forEach(function(step) {
+    step.addEventListener("dragstart", function(e) {
+      e.dataTransfer.setData("text/plain", this.dataset.idx);
+      this.classList.add("dragging");
+    });
+    step.addEventListener("dragend", function() { this.classList.remove("dragging"); });
+    step.addEventListener("dragover", function(e) { e.preventDefault(); this.classList.add("drag-over"); });
+    step.addEventListener("dragleave", function() { this.classList.remove("drag-over"); });
+    step.addEventListener("drop", function(e) {
+      e.preventDefault();
+      this.classList.remove("drag-over");
+      var fromIdx = parseInt(e.dataTransfer.getData("text/plain"));
+      var toIdx = parseInt(this.dataset.idx);
+      if (fromIdx === toIdx) return;
+      var item = _macroSteps.splice(fromIdx, 1)[0];
+      _macroSteps.splice(toIdx, 0, item);
+      updateMacroStepsUI();
+    });
+  });
+}
+
+async function replayMacro(steps) {
+  if (!steps || steps.length === 0) { showStatus("No steps to replay", "warning"); return; }
+  showStatus("Replaying " + steps.length + " steps...");
+  for (var i = 0; i < steps.length; i++) {
+    var step = steps[i];
+    if (step.delay > 0) await new Promise(function(r) { setTimeout(r, step.delay); });
+    if (step.type === "fill") {
+      var idx = step.fieldIndex;
+      if (idx !== undefined && fields[idx]) {
+        await doFill(idx);
+      } else if (step.fieldName) {
+        var found = -1;
+        fields.forEach(function(f, fi) { if (f.name === step.fieldName || f.id === step.fieldName) found = fi; });
+        if (found >= 0) await doFill(found);
+      }
+    } else if (step.type === "click") {
+      var bidx = step.buttonIndex;
+      if (bidx !== undefined && buttons[bidx]) {
+        await doClick(bidx);
+      }
+    } else if (step.type === "wait") {
+      var ms = parseInt(step.value) || 500;
+      await new Promise(function(r) { setTimeout(r, ms); });
+    } else if (step.type === "navigate") {
+      var url = step.value || step.fieldSelector || "";
+      if (url) {
+        var [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tab?.id) { await chrome.tabs.update(tab.id, { url: url }); await new Promise(function(r) { setTimeout(r, 2000); }); }
+      }
+    } else if (step.type === "screenshot") {
+      var [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab?.id) {
+        try {
+          var dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
+          var link = document.createElement("a");
+          link.download = "step-" + (i + 1) + "-" + Date.now() + ".png";
+          link.href = dataUrl; link.click();
+        } catch(e) { showStatus("Screenshot failed: " + e.message, "warning"); }
+      }
+    }
+    updateMacroStepsUI();
+  }
+  showStatus("Replay complete (" + steps.length + " steps)");
 }

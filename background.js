@@ -15,9 +15,14 @@ async function checkUpdate() {
       if (localData.lastPull) {
         const age = Date.now() - parseInt(localData.lastPull) * 1000;
         if (age < 360000) {
-          chrome.action.setBadgeText({ text: "" });
-          chrome.storage.local.set({ updateAvailable: null });
-          chrome.runtime.reload();
+          chrome.storage.local.get(["lastReloadTime"], function(r) {
+            var lastReload = r.lastReloadTime || 0;
+            var minInterval = 30 * 60 * 1000; // 30 min cooldown
+            if (Date.now() - lastReload < minInterval) return;
+            chrome.action.setBadgeText({ text: "" });
+            chrome.storage.local.set({ updateAvailable: null, lastReloadTime: Date.now() });
+            chrome.runtime.reload();
+          });
           return;
         }
       }
